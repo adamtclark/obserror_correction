@@ -2,10 +2,10 @@ require(BayesianTools)
 rm(list=ls())
 
 # make data
-b0 = 0.02
+b0 = 0
 b1 = 0.2
 
-n = 1e3
+n = 50
 pars = c(b0, b1)
 niter = 1
 cfout = matrix(nrow = niter, ncol = 2)
@@ -14,211 +14,104 @@ xT_mu = 0.5
 xT_sd = 0.1
 
 xT = rnorm(n, xT_mu, xT_sd)
-hist(xT)
+#hist(xT)
 x_sd = b0 + b1*xT
-plot(xT, x_sd)
+plot(xT, x_sd, log = "xy")
 
 xO = cbind(rnorm(n, xT, x_sd),
              rnorm(n, xT, x_sd))
-
-matplot(xT, xO, pch = c(1,2))
-
 xmu = rowMeans(xO)
-plot(xT, xmu)
+xsigma = sqrt((xO[,1]-xO[,2])^2/2)
+
+bins = cut(xT, 20)
+xO_std = xO
+xO_std = xO_std/xmu
+
+sqrt(mean(apply(xO_std, 1, var)))
+
+plot(tapply(xT, bins, mean), tapply(apply(xO_std, 1, var), bins, function(x) sqrt(mean(x))))
+
+
+matplot(xT, xO, pch = c(1,2), log = "xy")
+#plot(xT, xmu)
+#plot(lm(log(xT) ~ log(xmu)))
+
 
 deltax = xO[,1]-xO[,2]
 x_sd_est = sqrt((deltax)^2/2)
 moddat = data.frame(xtrue = xT, xO1 = xO[,1], xO2 = xO[,2], xOmu = xmu,
                     xO_sd = x_sd_est)
-#param = pars
-require(brms)
-medat = data.frame(rep = 1:nrow(moddat), obs = c(moddat$xO1, moddat$xO2), mu = moddat$xOmu)
 
-brm_out_0 <- brm(bf(obs~1 + (1|rep)) +
-                 nlf(sigma ~ log(exp(b0) + exp(b1)*mu)) +
-                 lf(b0 ~ 1) +
-                 lf(b1 ~ 1),
-                 data = medat, family = gaussian(),
-                 cores = 4, iter = 4000, save_pars = save_pars(all = TRUE), control = list(adapt_delta = 0.8))
-summary(brm_out_0)
-exp(fixed.effects(brm_out_0)[2:3,1])
-b0; b1
-
-if(FALSE) {
-  fact_mod <- bf(x1 ~ mi(ind60)) +
-    bf(x2  ~ mi(ind60)) +
-    bf(x3  ~ mi(ind60)) +
-    bf(ind60 | mi() ~ 0) +
-    set_rescor(rescor = FALSE)
-  
-  fact_fit <- brm(
-    fact_mod, data = PoliticalDemocracy,
-    prior = prior(normal(1, 0.001), resp = "x1", coef = "miind60") +
-      prior(normal(1, 3), resp = "x2", coef = "miind60") + 
-      prior(normal(1, 3), resp = "x3", coef = "miind60"),
-    control = list(adapt_delta = 0.99, max_treedepth = 15),
-    chains = 2, cores = 2
-  )
-  
-  
-  N <- 200
-  x = rnorm(N, 0, 1)
-  
-  dta <- 
-    data.frame(
-      x = x,
-      y1 = rnorm(N, 2*x, 1),
-      y2 = rnorm(N, 1*x, 1),
-      y3 = rnorm(N, 0.5*x, 1),
-      xo = as.numeric(NA)
-    )
-  
-  m1 <- 
-    brm(
-      formula =
-        bf(y1 ~ 0 + mi(xo)) +
-        bf(y2 ~ 0 + mi(xo)) +
-        bf(y3 ~ 0 + mi(xo)) +
-        bf(xo | mi() ~ 1) + 
-        set_rescor(rescor = FALSE),
-      family = gaussian(),
-      prior =
-        prior(constant(1), class = "b", resp = "y1") +
-        prior(constant(1), class = "sigma", resp = "y1") +
-        prior(normal(0, 10), class = "b", resp = "y2") +
-        prior(constant(1), class = "sigma", resp = "y2") +
-        prior(normal(0, 10), class = "b", resp = "y3") +
-        prior(constant(1), class = "sigma", resp = "y3") +
-        prior(normal(0, 10), class = "Intercept", resp = "xo") +
-        prior(cauchy(0, 1), class = "sigma", resp = "xo"),
-      data = dta,
-      cores = 4,
-      chains = 4,
-      threads = threading(2),
-      refresh = 5
-    )
-  
-  m1
-  plot(x, predict(m1)[,1,"xo"])
-}
-
-# No... will need to build in the latent variables into the BayesFunction below
-
-
-require(lognorm)
-
+# fit model
+# param = c(b0, b1, xT_mu, xT_sd, rnorm(n, xT_mu, xT_sd))
 likelihood <- function(param){
-  #b0 = param[1]
-  b1 = param[1]
+  b0 = param[1]
+  b1 = param[2]
 
-  xmu = moddat$xOmu
-  xO_sd = moddat$xO_sd
+  xT_mu = param[3]
+  xT_sd = param[4]
   
-  x_sd_est = b0 + b1*xmu #moddat$xO_sd
-  #x_sd_est = b0 + b1*(xT+rnorm(x_sd))
-  #x_sd_est = b0 + b1*xT+b1*rnorm(x_sd)
-  #x_sd_est = b0 + cov(xmu, s_sd)/(sigmaT^2+x_sd^2)*xmu
+  xE = param[5:length(param)]
   
-  #b1* = cov(xmu, x_sd)/(sigmaT^2+x_sd^2)
-  #1/b1* = sigmaT^2/cov(xmu, s_sd)+x_sd^2/cov(xmu, s_sd)
-  #1/b1* = 1/b1+x_sd^2/cov(xmu, s_sd)
-  #b1* = 1/(1/b1+x_sd^2/cov(xmu, s_sd))
+  x_sd_est = b0 + b1*xE
   
-  # get var of x_sd
-  lvl = cut(xmu, 20)
-  xmu_sq = tapply(xmu, lvl, mean)
-  xsd_var_sq = tapply(xO_sd^2, lvl, sd)
-  #plot(xmu_sq, xsd_var_sq)
-  mod = lm(xsd_var_sq~xmu_sq)
-  #abline(mod)
-  var_x0_var = predict(mod, newdata = data.frame(xmu_sq = xmu))^2
-  #var_x0_var[var_x0_var<0] = min(var_x0_var[var_x0_var>0])
-  #var(x^2) = 2*mu^4*sigma^2+2*sigma^4
-  #var_x0_var = 2*x_sd_est^4+var_x0_sd+2*var_x0_sd^2
-  
-  #llObservation = sum(dnorm(xO_sd^2-x_sd_est^2, sd = sqrt(var_x0_var), log = TRUE))
-  
-  lmpar = getParmsLognormForMoments(mean = x_sd_est^2,
-                                    var = var_x0_var)
-  llObservation = sum(dlnorm(xO_sd^2, meanlog = lmpar[,1],
-                             sd = sqrt(lmpar[,2]), log = TRUE))
-  
-  
-  #llObservation = sum(dnorm(moddat$xO1-xmu, sd = x_sd_est, log = TRUE))+
-  #  sum(dnorm(moddat$xO2-xmu, sd = x_sd, log = TRUE))
-  return(llObservation)
+  llObservation =   sum(c(dnorm(xE-moddat$xO1, sd = x_sd_est, log = TRUE), 
+                        dnorm(xE-moddat$xO2, sd = x_sd_est, log = TRUE)))
+  #llObservation =   sum(dnorm(xE-moddat$xOmu, sd = x_sd_est/sqrt(2), log = TRUE))
+
+  llRandomeffects = sum(dnorm(xE-xT_mu, xT_sd, log = TRUE))
+
+  return(llObservation+llRandomeffects)
 }
 
 
 #setup <- createBayesianSetup(likelihood = likelihood, lower = c(0,0), upper = c(1, 1))
-setup <- createBayesianSetup(likelihood = likelihood, lower = c(0), upper = c(1))
-settings <- list(iterations = 3e4,burnin = 1e4,consoleUpdates=1e2)
-res <- runMCMC(bayesianSetup = setup, settings = settings)
-plot(res, start = 100)
+setup <- createBayesianSetup(likelihood = likelihood,
+                             lower = c(0, 0, 0, 0, rep(0, n)),
+                             upper = c(1, 1, 1, 1, rep(1, n)))
+nchains = 4
 
-smpout = getSample(res, start = 100,parametersOnly=FALSE)
-round(colMeans(smpout[,1:2]),3)
-pars
+niter = 100
+datout = matrix(nrow = niter, ncol = 12)
+for(j in 1:niter) {
+  sV = NULL
+  for(i in 1:nchains) {
+    ps = sample(1:length(xmu), rep = TRUE)
+    parsest = pmax(coef(lm(xsigma[ps]~xmu[ps])), 1e-3)
+    
+    sV = rbind(sV, c(
+      parsest, # b0, b1
+      mean(xmu[ps]), #xT_mu
+      mean(xsigma[ps]), #xT_sd
+      xmu+rnorm(length(xmu), 0, (parsest[1]+parsest[2]*xmu)/sqrt(2))
+    ))
+  }
+  settings <- list(iterations = 5e4, burnin = 3e4, consoleUpdates=1e1, startValue=sV)
+  
+  res <- runMCMC(bayesianSetup = setup, settings = settings)
+  
+  smpout = getSample(res, start = 100, parametersOnly=FALSE)
+  xE_mu = colMeans(smpout[,1:4])
+  xE_sd = apply(smpout[,1:4], 2, sd)
+  
+  datout[j,1:4] = gelmanDiagnostics(res, start = 100, whichParameters = 1:4)$psrf[,1]
+  datout[j,5:8] = xE_mu[1:4]
+  datout[j,9:12] = xE_sd[1:4]
+  
+  print(j/niter)
+}
 
-hist(smpout[,1], breaks = 20); abline(v=b0, col = 2, lwd=2)
-#hist(smpout[,2], breaks = 20); abline(v=b1, col = 2, lwd=2)
-plot(smpout[,"par 1"], smpout[,"Lposterior"])
-abline(v = b1, lty = 2)
+# check for bias
+par(mar=c(4,4,2,2))
+hist(datout[,5], breaks = 20, main = "b0"); abline(v=b0, col = 2, lwd=2)
+hist(datout[,6], breaks = 20, main = "b1"); abline(v=b1, col = 2, lwd=2)
+hist(datout[,7], breaks = 20, main = "xT_mu"); abline(v=xT_mu, col = 2, lwd=2)
+hist(datout[,8], breaks = 20, main = "xT_sd"); abline(v=xT_sd, col = 2, lwd=2)
 
-
-
-
-
-
-
-b0^2+# check SD
-sd_est0 = b0 + b1*moddat$xOmu
-
-rtmp = rnorm(n, 0, x_sd)
-sd_est = b0 + b1*(moddat$xtrue+rtmp/sqrt(2))
-
-sd_est = b0 + b1*moddat$xtrue+b1*rtmp/sqrt(2)
-sd_est = x_sd+b1*rtmp/sqrt(2)
-
-x_sd_corrected = sd_est-b1*rtmp/sqrt(2)
-x_sd_corrected = sd_est-b1*rtmp/sqrt(2)
-
-
-plot(x_sd, x_sd_corrected); abline(a=0, b=1)
-
-#x_sd = b0 + b1*xT
-#sd_est = x_sd + b1*rnorm(n, 0, x_sd/sqrt(2))
-
-plot(x_sd, sd_est); abline(a=0, b=1, lty=3)
-points(x_sd, sd_est0, col = 2)
-
-
-tmp = (xmu-xT)#/(x_sd/sqrt(2))
-sq = seq(0,max(xT),length=20)
-lvls=cut(xT, breaks = sq)
-tmp2 = tapply(tmp, lvls, sd)
-plot(sq[-1], tmp2)
-lines(sq[-1], (b0+b1*sq[-1])/sqrt(2))
-
-
-plot(xT, tmp)
-
-coef(lm(x_sd~tmp))
-
-
-
-
-lvls=cut(xT, breaks = sq)
-tmp = cbind(tapply(x_sd, lvls, sd),
-      tapply(sd_est0, lvls, sd))
-matplot(sq[-1], tmp)
-
-
-
-
-
-#sd_est-b1*rnorm(n, 0, x_sd/sqrt(2)) = b0 + b1*moddat$xtrue
-#sd_est-b1*rnorm(n, 0, sd_est/sqrt(2)) = b0 + b1*moddat$xtrue
+hist(datout[,1], breaks = 20, main = "Gelman b0"); abline(v=1, col = 2, lwd=2)
+hist(datout[,2], breaks = 20, main = "Gelman b1"); abline(v=1, col = 2, lwd=2)
+hist(datout[,3], breaks = 20, main = "Gelman xT_mu"); abline(v=1, col = 2, lwd=2)
+hist(datout[,4], breaks = 20, main = "Gelman xT_sd"); abline(v=1, col = 2, lwd=2)
 
 
 
@@ -226,9 +119,27 @@ matplot(sq[-1], tmp)
 
 
 
-
-
-
-parssummary(res)
-plot(res, burnin = 2e4)
-marginalPlot(res, prior = T)
+if(FALSE) {
+  plot(res, start = 100, whichParameters = 1:2)
+  plot(res, start = 100, whichParameters = 3:4)
+  plot(res, start = 100, whichParameters = 5:6)
+  
+  round(colMeans(smpout[,1:2]),3)
+  pars
+  
+  hist(smpout[,1], xlim = c(0,1)); abline(v = b0, lty = 2, col = 2, lwd = 2)
+  hist(smpout[,2], xlim = c(0,1)); abline(v = b1, lty = 2, col = 2, lwd = 2)
+  
+  hist(smpout[,3], xlim = c(0,1)); abline(v = xT_mu, lty = 2, col = 2, lwd = 2)
+  hist(smpout[,4], xlim = c(0,1)); abline(v = xT_sd, lty = 2, col = 2, lwd = 2)
+  
+  xTest = colMeans(smpout[,5:(5+n-1)])
+  xTest_sd = apply(smpout[,5:(5+n-1)],2,sd)
+  plot(xT, xTest); abline(a = 0, b = 1, lty = 2)
+  segments(xT, xTest+xTest_sd, xT, xTest-xTest_sd)
+  
+  #hist(smpout[,1], breaks = 20); abline(v=b0, col = 2, lwd=2)
+  #hist(smpout[,2], breaks = 20); abline(v=b1, col = 2, lwd=2)
+  plot(smpout[,"par 1"], smpout[,"Lposterior"])
+  abline(v = b1, lty = 2)
+}
