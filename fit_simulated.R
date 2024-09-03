@@ -1,7 +1,7 @@
 require(BayesianTools)
 rm(list=ls())
 
-set.seed(1234)
+set.seed(14551)
 doplot = FALSE
 
 ### make data
@@ -19,7 +19,7 @@ x_sd = b1*xT # observation error sd
 
 ## observed states
 xO = cbind(rnorm(n, xT, x_sd),
-             rnorm(n, xT, x_sd))
+           rnorm(n, xT, x_sd))
 xmu = rowMeans(xO)
 #x_sd_est = sqrt((xO[,1]-xO[,2])^2/2)
 
@@ -37,7 +37,7 @@ if(doplot) {
   bins = cut(xT, 20)
   sqrt(mean(apply(xO_std_est, 1, var)))
   plot(tapply(xT, bins, mean), tapply(apply(xO_std_est, 1, var), bins, function(x) sqrt(mean(x))))
-
+  
   matplot(xT, xO, pch = c(1,2), log = "xy")
   plot(xT, xmu)
   
@@ -57,7 +57,7 @@ nparam = 3 # number of parameters
 likelihood <- function(param){
   # estimated parameters
   x_sd_est = b1 = param[1]
-
+  
   # estimated hyperparameters
   xT_mu = param[2]
   xT_sd = param[3]
@@ -65,28 +65,30 @@ likelihood <- function(param){
   # estimated states
   xE = param[4:length(param)]
   
+  llObservation =   sum(c(dnorm(xE-xO[,1], sd = xE*x_sd_est, log = TRUE), 
+                          dnorm(xE-xO[,2], sd = xE*x_sd_est, log = TRUE)))
   # standardised states
-  xO_std = xO/xE
+  #xO_std = xO/xE
   
   # xE_std = xE/xmu
   #llObservation =   sum(c(dnorm(xE_std-xO_std[,1], sd = x_sd_est, log = TRUE), 
   #                      dnorm(xE_std-xO_std[,2], sd = x_sd_est, log = TRUE)))
   #llObservation =   sum(dnorm(xE_std-1, sd = x_sd_est/sqrt(2), log = TRUE))
   
-  llObservation =   sum(c(dnorm(1-xO_std[,1], sd = x_sd_est, log = TRUE), 
-                        dnorm(1-xO_std[,2], sd = x_sd_est, log = TRUE)))
+  #llObservation =   sum(c(dnorm(1-xO_std[,1], sd = x_sd_est, log = TRUE), 
+  #                      dnorm(1-xO_std[,2], sd = x_sd_est, log = TRUE)))
   llRandomeffects = sum(dnorm(xE-xT_mu, xT_sd, log = TRUE))
-
+  
   return(llObservation+llRandomeffects)
 }
 
 ## set up Bayesian run
 setup <- createBayesianSetup(likelihood = likelihood,
                              lower = c(0, 0, 0, rep(0, n)),
-                             upper = c(1, 2, 2, rep(2, n)))
+                             upper = c(2, 5, 2, rep(2, n)))
 
 ## repeat fitting niter times
-niter = 100
+niter = 1
 datout = matrix(nrow = niter, ncol = nparam*3+3)
 stateout = matrix(nrow = niter, ncol = n)
 truestates = matrix(nrow = niter, ncol = n)
@@ -109,28 +111,31 @@ for(j in 1:niter) {
     
     # standardised estimates
     xO_std_est = xO/xmu
+    ps = 1:n
+  } else {
+    ps = sample(1:n, rep = TRUE)
   }
   
   ## run MCMC and save outputs
-  settings <- list(iterations = 1e5, burnin = 5e4, consoleUpdates=1e1)
+  settings <- list(iterations = 2e5, consoleUpdates=1e1)
   res <- runMCMC(bayesianSetup = setup, settings = settings)
   
-  smpout = getSample(res, start = 100, parametersOnly=FALSE)
+  smpout = getSample(res, start = 5e4, parametersOnly=FALSE)
   xE_mu = colMeans(smpout[,1:nparam])
   xE_sd = apply(smpout[,1:nparam], 2, sd)
   
   # diagnostics
-  datout[j,1:nparam] = gelmanDiagnostics(res, start = 100, whichParameters = 1:nparam)$psrf[,1]
+  datout[j,1:nparam] = gelmanDiagnostics(res, start = 5e4, whichParameters = 1:nparam)$psrf[,1]
   
   # parameters
   datout[j,1:nparam+nparam] = xE_mu
   datout[j,1:nparam+nparam*2] = xE_sd
   
   # naive estimates
-  parsest = sqrt(mean(apply(xO_std_est, 1, var)))
+  parsest = sqrt(mean(apply(xO_std_est[ps,], 1, var)))
   datout[j,nparam*3+1] = parsest # naive parameter estimate, b1
-  datout[j,nparam*3+2] = mean(xmu) # naive parameter estimate, xT_mu
-  datout[j,nparam*3+3] = sd(xmu) # naive parameter estimate, xT_sd
+  datout[j,nparam*3+2] = mean(xmu[ps]) # naive parameter estimate, xT_mu
+  datout[j,nparam*3+3] = sd(xmu[ps]) # naive parameter estimate, xT_sd
   
   # states
   stateout[j,] = colMeans(smpout[,(nparam+1):(nparam+n)])
@@ -144,19 +149,20 @@ for(j in 1:niter) {
 
 ## check hyperparameter likelihood
 if(FALSE) {
-  whichrun = sample(1e5/2, 1)
+  whichrun = sample(5e4, 1)
   xE = smpout[,(nparam+1):(nparam+n)][whichrun,]
   xmusq = seq(0, 1, length = 1000)
   tmp = numeric(1000)
   for(i in 1:1000) {
-    tmp[i] = sum(dnorm(xE-xmusq[i], 0.1, log = TRUE))
+    tmp[i] = likelihood(c(b1, xmusq[i], xT_sd, xE))
+      #sum(dnorm(xE-xmusq[i], 0.1, log = TRUE))
   }
-  plot(xmusq, tmp)
+  plot(xmusq, tmp, xlab = "xT_mu", ylab = "LL")
   abline(v=xT_mu, lty=2)
 }
 
 ## plot diagnostics for a single MCMC run
-plot(res, start = 100, whichParameters = 1:nparam)
+plot(res, start = 5e4, whichParameters = 1:nparam)
 round(colMeans(smpout[,1:nparam]),3)
 c(b1, xT_mu, xT_sd)
 
@@ -168,9 +174,10 @@ xTest = colMeans(smpout[,(nparam+1):(nparam+n)])
 xTest_sd = apply(smpout[,(nparam+1):(nparam+n)],2,function(x) quantile(x, pnorm(c(-1,1))))
 plot(xT, xTest); abline(a = 0, b = 1, lty = 2)
 segments(xT, xTest_sd[1,], xT, xTest_sd[2,])
+gelmanDiagnostics(res, start = 100, whichParameters = 1:nparam)$psrf[,1]
 
 # plot estimate for observation i
-i = 1
+i = sample(n, 1)
 hist(smpout[,(nparam+1):(nparam+n)][,i], breaks = 20, main = "xT[i]", xlim = c(0,1)); abline(v=xT[i], col = 2, lwd=2)
 
 if(FALSE) {
