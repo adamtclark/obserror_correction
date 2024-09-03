@@ -1,0 +1,342 @@
+---
+title: "NutNet Observation Error Add-on"
+author: "Adam Clark"
+date: "2024-08-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summary
+
+Below are some early results from our NutNet observation error add-on. So far, I've integrated data from 25 sites, located across North America (13 sites), Europe (8 sites), and Australia (4 sites). Data were collected from across 183 unique plots, representing a total of about 660 survey "events" (i.e. a single person conducting a single survey in a single plot).
+
+Our first question is how we want to proceed with the paper. I think we have three potential options:
+
+1. put out a data/methods paper summarizing more or less the results and data presented below
+2. add in some additional analyses to provide fitted "priors" that could be used by subsequent studies to account for effects of observation error on their analyses
+3. put in some more substantial effort to parameterize a "confusion matrix", which could potentially be used to assess the likelihood of mixing up particular pairs of species, or overlooking specific classes of species
+
+My inclination is to proceed with option 2 for now, as it will be relatively fast and painless, but I think could help make the result more generally useful (e.g. I'm thinking an MEE paper titled something like "An informative prior for assessing observation error impacts on vegetation surveys"). That said, if anyone is champing at the bit to push things in another direction, I'd love to chat and plan -- and ditto for anyone who would like to be involved in a more substantial faction as I start putting together a paper outline to send around to everyone.
+
+*What I need from you:*
+
+1. If you'd like to be involved in discussions/planning for the paper outline, please reply to me, and we can find a place/time to meet (probably online in early September).
+2. If you have plans for other potential projects or papers that might come out of this add-on, then feel free to reply either to me, or to the whole email list with additional suggestions.
+
+If you don't have the interest or capacity to be more broadly involved right now, that's totally fine. I'll aim to have a rough outline for the paper (i.e. blocked out goals and methods, figures and captions, etc.) by the end of October. I'll send that around to all of you then for a first round of comments.
+
+
+## First Results
+
+```{r, echo = FALSE}
+# load processed data - I've also attached the raw data if you want to  play with that instead
+
+d_resurvey = read.csv("data/NutNet_ReSurvey_processed_240814.csv")
+
+plot_sites_fun = function(agdat, nameslist = c("div_1", "div_2", "div_3"), alphalevel = 0.2) {
+  # plotting function for drawing separate lines for each site
+  stlst = sort(unique(agdat$SITE_CODE))
+  require(lmodel2, quietly = TRUE)
+  
+  colnames(agdat)[which(colnames(agdat) %in% nameslist)] = c("div_1", "div_2", "div_3")
+  
+  slope_lst = matrix(nrow = length(stlst), ncol = 3, data = NA)
+  
+  suppressWarnings({
+    for(i in 1:length(stlst)) {
+      ps = which(agdat$SITE_CODE == stlst[i])
+      xsq = seq(min(agdat$div_1[ps], na.rm=TRUE), max(agdat$div_1[ps], na.rm=TRUE), length=100)
+      collst = viridis(3)
+      collst2 = adjustcolor(viridis(3), alpha.f = alphalevel)
+      
+      if(sum(!is.na(agdat$div_2[ps]+agdat$div_1[ps]))>2) {
+        mod1 = suppressMessages(lmodel2(div_2~div_1, agdat[ps,], "relative", "relative"))
+        pd1 = mod1$regression.results[4,2]+mod1$regression.results[4,3]*xsq
+        #predict(mod1, newdata = data.frame(div_1=xsq))
+        lines(xsq, pd1, col = collst2[1])
+        slope_lst[i,1] = mod1$regression.results[4,3]
+      }
+      
+      if(sum(!is.na(agdat$div_3[ps]+agdat$div_1[ps]))>2) {
+        mod2 = suppressMessages(lmodel2(div_3~div_1, agdat[ps,], "relative", "relative"))
+        pd2 = mod2$regression.results[4,2]+mod2$regression.results[4,3]*xsq
+        #predict(mod1, newdata = data.frame(div_1=xsq))
+        lines(xsq, pd2, col = collst2[2])
+        slope_lst[i,2] = mod2$regression.results[4,3]
+      }
+      if(sum(!is.na(agdat$div_4[ps]+agdat$div_1[ps]))>2) {
+        mod3 = suppressMessages(lmodel2(div_4~div_1, agdat[ps,], "relative", "relative"))
+        pd3 = mod3$regression.results[4,2]+mod3$regression.results[4,3]*xsq
+        #predict(mod1, newdata = data.frame(div_1=xsq))
+        lines(xsq, pd3, col = collst2[3])
+        slope_lst[i,3] = mod3$regression.results[4,3]
+      }
+    }})
+  return(slope_lst)
+}
+```
+
+### Species-level cover results
+
+```{r, echo = FALSE}
+par(mar=c(4,4,2,2), mfrow = c(1,1))
+
+# plot
+require(viridis, quietly = TRUE)
+collst = viridis(3)
+plot(d_resurvey$cover_1, d_resurvey$cover_2, xlab = "cover, first survey", ylab = "cover, repeat surveys", col = collst[1])
+points(d_resurvey$cover_1, d_resurvey$cover_3, col = collst[2])
+points(d_resurvey$cover_1, d_resurvey$cover_4, col = collst[3])
+abline(a=0, b = 1, lty = 2)
+
+slopes = plot_sites_fun(d_resurvey, c("cover_1", "cover_2", "cover_3"))
+legend("bottomright", c("survey 2", "survey 3", "survey 4"), pch = 1, col = collst)
+```
+
+The first result (which you probably have already seen in previous emails) is pretty straightforward -- for the most part, cover estimates are relatively consistent among resurveys. Here, the x-axis shows species-level cover taken during the "first" survey, and the y-axis shows estimates from subsequent surveys (up to 3 additional surveys per site -- though usually just 1). The dashed black line shows a 1-1 relationship, and the lighter colored lines show relationships for individual sites. Note that these lines are based on type-2 regression (using the lmodel2 package), since we have to account for potential error in both the x- and y-variables (unlike standard OLS which assumes only error in the y-variable).
+
+```{r, echo = FALSE}
+par(mar=c(4,4,2,2), mfrow = c(1,1))
+
+mean_cover = rowMeans(d_resurvey[,grep("cover", colnames(d_resurvey))], na.rm=TRUE)
+var_cover = apply(d_resurvey[,grep("cover", colnames(d_resurvey))],1,function(x) var(x, na.rm=TRUE))
+
+mean_cover = mean_cover[var_cover>0]
+var_cover = var_cover[var_cover>0]
+
+plot(mean_cover, var_cover, log = "xy", xlab = "mean cover est.", ylab = "cover est. variance")
+mnsq = exp(seq(log(min(mean_cover, na.rm=TRUE)), log(max(mean_cover, na.rm=TRUE)), length=1e3))
+lines(mnsq, mnsq^2, lty = 2, lwd = 2, col = "red")
+
+lines(mnsq, (mnsq*0.1)^2, lty = 3, lwd = 2, col = "red")
+
+mod = loess(log(var_cover)~log(mean_cover))
+pred = predict(mod, newdata = data.frame(mean_cover = mnsq))
+
+lines(mnsq, exp(pred), col = "blue", lwd = 2)
+legend("topleft", c("sd(error) = mean est.", "sd(error) = 10% of mean est.", "loess fit"), lty = c(2,3,1), lwd = 2, col = c("red", "red", "blue"), bty = "n")
+```
+
+Delving a bit deeper, we can look at how error rates vary as a function of cover estimates. Here, the vertical axis shows variance among resurvey estimates for species-level cover for each plot (see code above for how we calculate this for plots with just two observations). The dashed (red) line shows a 1-1 relationship (i.e. variability is roughly as large as the mean cover estimate -- suggesting very low confidence in cover values), the dotted line shows a 1/10 relationship (i.e. mean cover is roughly 10 times larger than the variability in cover estimate), and the blue line shows the average trend across all plots. Unsurprisingly, these results suggest that there is relatively low certainty for cover estimates of below 10% -- though recall that even very high error at low cover values still implies a relatively low overall change in the estimate -- e.g. 80% error given a cover value of 5% implies a "true" value of between 1% and 9%.
+
+### Species identity
+
+```{r, echo = FALSE}
+par(mar=c(4,4,2,2), mfrow = c(1,1))
+# missing species
+prob_zero = apply(d_resurvey[,grep("cover", colnames(d_resurvey))], 1, function(x) mean(x[!is.na(x)]==0))
+n_obs = apply(d_resurvey[,grep("cover", colnames(d_resurvey))], 1, function(x) sum(!is.na(x)))
+nonzero_mean = apply(d_resurvey[,grep("cover", colnames(d_resurvey))], 1, function(x) mean(x[!is.na(x) & x>0]))
+zero_obs = n_obs*prob_zero
+
+plot(nonzero_mean, jitter(prob_zero), xlab = "mean non-zero cover", ylab = "probability of zero cover")
+
+mod = glm(cbind(zero_obs, n_obs)~nonzero_mean, family = "binomial")
+
+mnsq = (seq((min(nonzero_mean)), max((nonzero_mean)), length=1e3))
+pred = predict(mod, newdata = data.frame(nonzero_mean = mnsq), type = "response")
+
+lines(mnsq, pred, col = "blue", lwd = 2)
+legend("topright", c("logit regression"), lty = c(1), lwd = 2, col = c("blue"), bty = "n")
+```
+
+Next, we can ask how consistent surveys are in terms of the identity of species that were identified. There are lots of more complex ways to look at this, but a very simple approach is to quantify the probability that at least one surveyor identifies a species that is not identified in at least one resurvey (e.g. surveyor finds species A, but surveyor 2 does not). Importantly, this kind of error does not tell us whether this is a false positive (incorrectly assume the presence of an absent species) or a false negative (missing a species), nor does it account for cases where two surveyors both find the same individual, but identify it to two different species IDs. For these questions, we'd have to apply a somewhat more complicated approach, e.g. the "confusion matrices" discussed above.
+
+On the graph, the horizontal axis shows the cover estimated for species that were observed by at least one surveyor, whereas the vertical axis shows the frequency with which at least one other surveyor fails to identify the same species in the plot. E.g. "1" implies that all other surveyors missed the species, whereas 0 implies that no one did. Points show records for each species in each plot, slightly jittered along the y-axis for clarity. The blue line shows the average fit from a GLM.
+
+```{r, echo = FALSE}
+summary(mod)
+```
+
+The GLM shows us that there is indeed a significant negative relationship between the probability of missing a species and the cover estimate for that species, though with the caveat that this is not yet correcting for pseudoreplication (of which there is lots in this case). In general, though, the model predicts a roughly 20% chance of ID errors for very rare species (implying either that the species was missed, or incorrectly IDed), dropping to just a few percent for covers about 20%. That is, errors are (unsurprisingly) much more common for very rare than for very common species.
+
+Note, for whatever final analysis we do here, we'll need to account for repeated measures, and for the fact that an ID error will often lead to two "observed" errors -- e.g. if surveyor 1 decides that an individual is species A, whereas surveyor 2 thinks it is B, then the same species will show up twice on the plot, which is a bit statistically problematic.
+
+### Aggregate statistics:
+
+Upon seeing the results above, Eric Seabloom suggested looking at some more aggregate statistics like plot-level diversity. These results are shown below, for three levels of aggregation: species richness, Shannon diversity species equivalents, and Simpson diversity species equivalents (Hill Numbers order 0, 1, and 2, respectively).
+
+```{r, echo = FALSE}
+### function for quantifying Hill statistics
+hillfun = function(x, q = 0) {
+  x[x==0] = NA
+  if(is.null(dim(x))) {
+    x = matrix(x)
+  }
+  if(nrow(x)>1) {
+    p = x/rep(colSums(x, na.rm=TRUE), each = nrow(x))
+    if(q == 0) {
+      D = colSums(x>0, na.rm=TRUE)
+    } else if(q == 1) {
+      D = exp(-colSums(p*log(p), na.rm = TRUE))
+    } else {
+      D = colSums(p^q,na.rm=TRUE)^(1/(1-q))
+    }
+    D[!is.finite(D)] = NA
+    D[apply(x, 2, function(y) all(is.na(y)))] = NA
+    return(D)
+  } else {
+    return(NA)
+  }
+}
+
+
+# aggregating data to get plot-level diversity estimates
+d_resurvey_ag = with(d_resurvey[!d_resurvey$species%in%c("bare ground", "litter", "cryptogam"),], aggregate(list(div_1 = cover_1,
+                                div_2 = cover_2,
+                                div_3 = cover_3,
+                                div_4 = cover_4),
+                          by = list(SITE_CODE = SITE_CODE, trt = trt,
+                                    first_nutrient_year = first_nutrient_year,
+                                    block = block, plot = plot),
+                          FUN = function(x) hillfun(x, q = 0)))
+
+## function for aggregating data
+agfun = function(q) {
+  with(d_resurvey[!d_resurvey$species%in%c("bare ground", "litter", "cryptogam"),], aggregate(list(div_1 = cover_1,
+                     div_2 = cover_2,
+                     div_3 = cover_3,
+                     div_4 = cover_4),
+                by = list(SITE_CODE = SITE_CODE, trt = trt,
+                          first_nutrient_year = first_nutrient_year,
+                          block = block, plot = plot),
+                FUN = function(x) hillfun(x, q = q)))
+}
+
+d_resurvey_ag_RI = agfun(0)
+
+collst = viridis(3)
+
+par(mfcol = c(2,3), mar = c(4,4,2,2))
+plot(d_resurvey_ag_RI$div_1, d_resurvey_ag_RI$div_2, xlab = "richness, first survey", ylab = "richness, repeat surveys", col = collst[1])
+points(d_resurvey_ag_RI$div_1, d_resurvey_ag_RI$div_3, col = collst[2])
+points(d_resurvey_ag_RI$div_1, d_resurvey_ag_RI$div_4, col = collst[3])
+abline(a=0, b = 1, lty = 2)
+slopes = plot_sites_fun(d_resurvey_ag_RI)
+legend("bottomright", c("survey 2", "survey 3", "survey 4"), pch = 1, col = collst)
+hist(c(slopes), breaks = 20, xlab = "site-level slope", main = "")
+abline(v = mean(slopes, na.rm=TRUE), lty = 2)
+
+
+## shannon
+d_resurvey_ag_SH = agfun(1)
+
+collst = viridis(3)
+plot(d_resurvey_ag_SH$div_1, d_resurvey_ag_SH$div_2, xlab = "Shannon, first survey", ylab = "Shannon, repeat surveys", col = collst[1])
+points(d_resurvey_ag_SH$div_1, d_resurvey_ag_SH$div_3, col = collst[2])
+points(d_resurvey_ag_SH$div_1, d_resurvey_ag_SH$div_4, col = collst[3])
+abline(a=0, b = 1, lty = 2)
+slopes = plot_sites_fun(d_resurvey_ag_SH)
+legend("bottomright", c("survey 2", "survey 3", "survey 4"), pch = 1, col = collst)
+hist(c(slopes), breaks = 20, xlab = "site-level slope", main = "")
+abline(v = mean(slopes, na.rm=TRUE), lty = 2)
+
+## Simpson
+d_resurvey_ag_SI = agfun(2)
+
+collst = viridis(3)
+plot(d_resurvey_ag_SI$div_1, d_resurvey_ag_SI$div_2, xlab = "Simpson, first survey", ylab = "Simpson, repeat surveys", col = collst[1])
+points(d_resurvey_ag_SI$div_1, d_resurvey_ag_SI$div_3, col = collst[2])
+points(d_resurvey_ag_SI$div_1, d_resurvey_ag_SI$div_4, col = collst[3])
+abline(a=0, b = 1, lty = 2)
+slopes = plot_sites_fun(d_resurvey_ag_SI)
+legend("bottomright", c("survey 2", "survey 3", "survey 4"), pch = 1, col = collst)
+hist(c(slopes), breaks = 20, xlab = "site-level slope", main = "")
+abline(v = mean(slopes, na.rm=TRUE), lty = 2)
+
+# note - higher error, due to impact of cover?
+```
+
+Again, the x-axis shows estimates from the first survey, and the y-axis results from subsequent surveys. Each line shows trends for individual sites (again using type-2 sum of squares). The histograms below each plot show the distribution for the slopes across sites, with the vertical dashed line showing the mean.
+
+Encouragingly, estimates of species richness seem to fare very well, with an average slope of almost exactly 1 (i.e. close correspondence between initial and resurvey estimates), with relatively little variability across sites. Curiously, errors for Shannon and Simpson diversity are much higher -- especially at higher diversity. Usually we find the reverse -- i.e. that Shannon and Simpson give more reliable estimates than richness, as they discount rarer species. But in this case, the result does make sense in retrospect -- unlike richness, Shannon and Simpson both include data on species-level cover, and thus, the estimates inherit additional error from cover data. These results are also in line with those from Pan et al. (2024), described at the end of this document.
+
+```{r, echo = FALSE}
+par(mar=c(4,4,2,2), mfrow = c(1,1))
+
+cover_resurvey_ag = with(d_resurvey[!d_resurvey$species%in%c("bare ground", "litter", "cryptogam"),], aggregate(list(div_1 = cover_1,
+                           div_2 = cover_2,
+                           div_3 = cover_3,
+                           div_4 = cover_4),
+                      by = list(SITE_CODE = SITE_CODE, trt = trt,
+                                first_nutrient_year = first_nutrient_year,
+                                block = block, plot = plot),
+                      FUN = function(x) sum(x, na.rm=TRUE)))
+cover_resurvey_ag[,6:9][cover_resurvey_ag[,6:9]==0] = NA
+
+collst = viridis(3)
+plot(cover_resurvey_ag$div_1, cover_resurvey_ag$div_2, xlab = "total cover, first survey", ylab = "total cover, repeat surveys", col = collst[1])
+points(cover_resurvey_ag$div_1, cover_resurvey_ag$div_3, col = collst[2])
+points(cover_resurvey_ag$div_1, cover_resurvey_ag$div_4, col = collst[3])
+abline(a=0, b = 1, lty = 2)
+legend("bottomright", c("survey 2", "survey 3", "survey 4"), pch = 1, col = collst)
+```
+
+For total plot-level cover estimates, things are a bit more stable. Here, we find generally high correspondence across surveys, which is encouraging. It also goes against some of the findings of the Pan et al. (2024) paper.
+
+## Next steps?
+
+There are a few relatively basic next steps that need to be taken in order to produce more "robust" statistical results for the plots/data shown above:
+
+1. update models to account for pseudoreplication
+2. include goodness of fit estimates, e.g. average site-level R2 and average cross-site R2
+3. deal with effects of heteroskedasticity 
+
+I'll work on those points (should be relatively easy) before I send out the draft outline in a few weeks.
+
+There are also some more general questions that we can decide to pursue or not, depending on time and interest. A few of these include: 
+
+1. comparing results across different cover scales -- e.g. absolute vs. relative
+2. assessing error rates for resurveys conducted by the same vs. different people
+3. error vs. time between surveys (e.g. on same day, on different days)
+4. error vs. nutrient or fencing treatment, or for high vs. low-diversity plots?
+5. parameterization of informative priors (e.g. in the BayesianTools package?)
+6. derivation of a confusion matrix or other similar species-level ID error estimates
+7. (suggested by Borer): are there are certain e.g., functional groups, that are most likely to be estimated differently by different observers?
+8. (suggested by Koerner): effects of phenology, e.g. comparing early to late surveys, vs. lists of species assumed to be early vs. late season?
+9. (suggested by Prober): potential additional predictors of variance (e.g. species richness as a predictor of variance in species richness)
+10. (suggested by Prober): potential way to predict the effect of user variability on ability to detect trends – e.g. how does the level of user variability compare with between-treatment variation (ratio user/between-treatment variance)?
+11. (suggested by Komatsu): I also think making the point that the deviations at low cover values might be more common, but might also be less meaningful because they are low numbers to begin with is important.  But when we think about change in cover for a species over time, we might need to consider these increases in low numbers (which would look like doublings, triplings, etc with response ratios) as well as species that were missed.
+12. (suggested by Bakker): I think it would be useful to include recommendations for how ecologists could minimize observation error in the field.  Some of this is just common sense (e.g., create a master list of codes or names to use on all datasheets).
+13. (suggested by Roscher): I would assume that my observation error (e.g. species ID) is greater, when the vegetation is very dense (high biomass), i.e. higher in NPK than in control plots. (similarly, from Adler): Maybe errors in cover of rare species are also higher where total cover is high? 
+14. (suggested by Adler): Are grasses easier to miss (or harder to estimate) than broad-leaved species? Could you test these ideas by simply adding covariates to your models, rather than getting into the confusion matrices?
+
+I'd be especially grateful for a chance to discuss these ideas, and/or any other potential questions or analyses that you might be interested in leading. Looking forward to your thoughts and comments!
+
+## Potentially relevant literature:
+
+Preliminary notes on some relevant papers:
+
+1. Leps, 1992. Oikos:
+* 40 releves (5 m2) were compared and re-sampled
+* standard Braun-Blanquet scale
+* richness and diversity estimated, multivariate analyses, turnover rates
+* 13% error in species
+* multivariate: cover errors and species identity errors equally important
+* diversity and richness estimates accurate, equitibility not
+* Nilsson & Nilsson pseudo-turnover formula: A+B/(Sa+SB) with exclusive species A and B.
+2. Pan 2024, Journal of Vegetation Science
+* Species-level cover and species-level biomass are strongly correlated
+* Cover leads to higher estimates of higher Hill Numbers (but very similar richness)
+* Total summed cover is a very poor indicator of total biomass, total biomass dynamics, etc.
+3. McNellie 2018, Journal of Vegetation Science
+* Should use species abundance distributions when converting from cover classes to percent cover, and vice versa
+4. Morrison 2016, Journal of Plant Ecology
+* Three common error types: missing a species that is present, misidentifying a species, and errors in cover estimate.
+* 10-30% “pseudoturnover” rates (no strong relation with plot size)
+* Cover CV: 10-100%
+* Plots over 4m2 and below 0.001m2 hard to sample.
+5. Miller 2011, Ecology
+* Dealing with false positives and false negatives in surveys.
+* Includes some likelihood models.
+* Appears to apply in cases where even just a single observation is available.
+6. (Jim) Clark 2004, Ecology
+* Bayesian approaches for dealing with error, based on time-series.
+7. Solow 1998, Ecology
+* SIMEX approach for fitting models with observation error.
+8. Chiarucci 2007, Folia Geobotanica:
+* Random sampling vs. phytosociological methods – suggests pros and cons for both
+* Generally get more species with phyto. methods, but of course difficult statistically
