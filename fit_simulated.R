@@ -1,145 +1,218 @@
 require(BayesianTools)
 rm(list=ls())
 
-# make data
-b0 = 0
-b1 = 0.2
+set.seed(1234)
+doplot = FALSE
 
-n = 50
-pars = c(b0, b1)
-niter = 1
-cfout = matrix(nrow = niter, ncol = 2)
+### make data
+## parameters
+b1 = 0.2 # observation error parameters
+n = 50 # sample size
 
+## hyperparamters
 xT_mu = 0.5
 xT_sd = 0.1
 
+## true states
 xT = rnorm(n, xT_mu, xT_sd)
-#hist(xT)
-x_sd = b0 + b1*xT
-plot(xT, x_sd, log = "xy")
+x_sd = b1*xT # observation error sd
 
+## observed states
 xO = cbind(rnorm(n, xT, x_sd),
              rnorm(n, xT, x_sd))
 xmu = rowMeans(xO)
-xsigma = sqrt((xO[,1]-xO[,2])^2/2)
+#x_sd_est = sqrt((xO[,1]-xO[,2])^2/2)
 
-bins = cut(xT, 20)
-xO_std = xO
-xO_std = xO_std/xmu
-
-sqrt(mean(apply(xO_std, 1, var)))
-
-plot(tapply(xT, bins, mean), tapply(apply(xO_std, 1, var), bins, function(x) sqrt(mean(x))))
+#plot(xmu, x_sd_est)
+#require(lmodel2)
+#tmp[i] = lmodel2(x_sd_est~xmu, range.y = "RMA", range.x = "RMA")$regression.results[4,3]
 
 
-matplot(xT, xO, pch = c(1,2), log = "xy")
-#plot(xT, xmu)
-#plot(lm(log(xT) ~ log(xmu)))
+## standardised estimates
+xO_std_est = xO/xmu
+
+if(doplot) {
+  plot(xT, x_sd, log = "xy")
+  
+  bins = cut(xT, 20)
+  sqrt(mean(apply(xO_std_est, 1, var)))
+  plot(tapply(xT, bins, mean), tapply(apply(xO_std_est, 1, var), bins, function(x) sqrt(mean(x))))
+
+  matplot(xT, xO, pch = c(1,2), log = "xy")
+  plot(xT, xmu)
+  
+  op=par(mfrow=c(2,2))
+  mod = lm(log(xT) ~ log(xmu))
+  summary(mod)
+  plot(mod)
+  par(op)
+}
 
 
-deltax = xO[,1]-xO[,2]
-x_sd_est = sqrt((deltax)^2/2)
-moddat = data.frame(xtrue = xT, xO1 = xO[,1], xO2 = xO[,2], xOmu = xmu,
-                    xO_sd = x_sd_est)
+### fit model
+nparam = 3 # number of parameters
+# param = c(b1, xT_mu, xT_sd, xT)
 
-# fit model
-# param = c(b0, b1, xT_mu, xT_sd, rnorm(n, xT_mu, xT_sd))
+## likelihood function
 likelihood <- function(param){
-  b0 = param[1]
-  b1 = param[2]
+  # estimated parameters
+  x_sd_est = b1 = param[1]
 
-  xT_mu = param[3]
-  xT_sd = param[4]
+  # estimated hyperparameters
+  xT_mu = param[2]
+  xT_sd = param[3]
   
-  xE = param[5:length(param)]
+  # estimated states
+  xE = param[4:length(param)]
   
-  x_sd_est = b0 + b1*xE
+  # standardised states
+  xO_std = xO/xE
   
-  llObservation =   sum(c(dnorm(xE-moddat$xO1, sd = x_sd_est, log = TRUE), 
-                        dnorm(xE-moddat$xO2, sd = x_sd_est, log = TRUE)))
-  #llObservation =   sum(dnorm(xE-moddat$xOmu, sd = x_sd_est/sqrt(2), log = TRUE))
-
+  # xE_std = xE/xmu
+  #llObservation =   sum(c(dnorm(xE_std-xO_std[,1], sd = x_sd_est, log = TRUE), 
+  #                      dnorm(xE_std-xO_std[,2], sd = x_sd_est, log = TRUE)))
+  #llObservation =   sum(dnorm(xE_std-1, sd = x_sd_est/sqrt(2), log = TRUE))
+  
+  llObservation =   sum(c(dnorm(1-xO_std[,1], sd = x_sd_est, log = TRUE), 
+                        dnorm(1-xO_std[,2], sd = x_sd_est, log = TRUE)))
   llRandomeffects = sum(dnorm(xE-xT_mu, xT_sd, log = TRUE))
 
   return(llObservation+llRandomeffects)
 }
 
-
-#setup <- createBayesianSetup(likelihood = likelihood, lower = c(0,0), upper = c(1, 1))
+## set up Bayesian run
 setup <- createBayesianSetup(likelihood = likelihood,
-                             lower = c(0, 0, 0, 0, rep(0, n)),
-                             upper = c(1, 1, 1, 1, rep(1, n)))
-nchains = 4
+                             lower = c(0, 0, 0, rep(0, n)),
+                             upper = c(1, 2, 2, rep(2, n)))
 
+## repeat fitting niter times
 niter = 100
-datout = matrix(nrow = niter, ncol = 12)
+datout = matrix(nrow = niter, ncol = nparam*3+3)
+stateout = matrix(nrow = niter, ncol = n)
+truestates = matrix(nrow = niter, ncol = n)
+
+j = 1; i =1
 for(j in 1:niter) {
-  sV = NULL
-  for(i in 1:nchains) {
-    ps = sample(1:length(xmu), rep = TRUE)
-    parsest = pmax(coef(lm(xsigma[ps]~xmu[ps])), 1e-3)
-    
-    sV = rbind(sV, c(
-      parsest, # b0, b1
-      mean(xmu[ps]), #xT_mu
-      mean(xsigma[ps]), #xT_sd
-      xmu+rnorm(length(xmu), 0, (parsest[1]+parsest[2]*xmu)/sqrt(2))
-    ))
-  }
-  settings <- list(iterations = 5e4, burnin = 3e4, consoleUpdates=1e1, startValue=sV)
+  ## generate data and get "naive" estimates
   
+  vary_states = FALSE
+  if(vary_states) {
+    # true states
+    xT = rnorm(n, xT_mu, xT_sd)
+    x_sd = b1*xT # observation error sd
+    truestates[j,] = xT
+    
+    # observed states
+    xO = cbind(rnorm(n, xT, x_sd),
+               rnorm(n, xT, x_sd))
+    xmu = rowMeans(xO)
+    
+    # standardised estimates
+    xO_std_est = xO/xmu
+  }
+  
+  ## run MCMC and save outputs
+  settings <- list(iterations = 1e5, burnin = 5e4, consoleUpdates=1e1)
   res <- runMCMC(bayesianSetup = setup, settings = settings)
   
   smpout = getSample(res, start = 100, parametersOnly=FALSE)
-  xE_mu = colMeans(smpout[,1:4])
-  xE_sd = apply(smpout[,1:4], 2, sd)
+  xE_mu = colMeans(smpout[,1:nparam])
+  xE_sd = apply(smpout[,1:nparam], 2, sd)
   
-  datout[j,1:4] = gelmanDiagnostics(res, start = 100, whichParameters = 1:4)$psrf[,1]
-  datout[j,5:8] = xE_mu[1:4]
-  datout[j,9:12] = xE_sd[1:4]
+  # diagnostics
+  datout[j,1:nparam] = gelmanDiagnostics(res, start = 100, whichParameters = 1:nparam)$psrf[,1]
+  
+  # parameters
+  datout[j,1:nparam+nparam] = xE_mu
+  datout[j,1:nparam+nparam*2] = xE_sd
+  
+  # naive estimates
+  parsest = sqrt(mean(apply(xO_std_est, 1, var)))
+  datout[j,nparam*3+1] = parsest # naive parameter estimate, b1
+  datout[j,nparam*3+2] = mean(xmu) # naive parameter estimate, xT_mu
+  datout[j,nparam*3+3] = sd(xmu) # naive parameter estimate, xT_sd
+  
+  # states
+  stateout[j,] = colMeans(smpout[,(nparam+1):(nparam+n)])
   
   print(j/niter)
 }
 
-# check for bias
-par(mar=c(4,4,2,2))
-hist(datout[,5], breaks = 20, main = "b0"); abline(v=b0, col = 2, lwd=2)
-hist(datout[,6], breaks = 20, main = "b1"); abline(v=b1, col = 2, lwd=2)
-hist(datout[,7], breaks = 20, main = "xT_mu"); abline(v=xT_mu, col = 2, lwd=2)
-hist(datout[,8], breaks = 20, main = "xT_sd"); abline(v=xT_sd, col = 2, lwd=2)
+# save(list = c("datout", "stateout", "truestates"), file = "output/mcmcout_fixed.rda")
+# load("output/mcmcout.rda")
+# load("output/mcmcout_fixed.rda")
 
-hist(datout[,1], breaks = 20, main = "Gelman b0"); abline(v=1, col = 2, lwd=2)
-hist(datout[,2], breaks = 20, main = "Gelman b1"); abline(v=1, col = 2, lwd=2)
-hist(datout[,3], breaks = 20, main = "Gelman xT_mu"); abline(v=1, col = 2, lwd=2)
-hist(datout[,4], breaks = 20, main = "Gelman xT_sd"); abline(v=1, col = 2, lwd=2)
+## check hyperparameter likelihood
+if(FALSE) {
+  whichrun = sample(1e5/2, 1)
+  xE = smpout[,(nparam+1):(nparam+n)][whichrun,]
+  xmusq = seq(0, 1, length = 1000)
+  tmp = numeric(1000)
+  for(i in 1:1000) {
+    tmp[i] = sum(dnorm(xE-xmusq[i], 0.1, log = TRUE))
+  }
+  plot(xmusq, tmp)
+  abline(v=xT_mu, lty=2)
+}
 
+## plot diagnostics for a single MCMC run
+plot(res, start = 100, whichParameters = 1:nparam)
+round(colMeans(smpout[,1:nparam]),3)
+c(b1, xT_mu, xT_sd)
 
+hist(smpout[,1], xlim = c(0,1)); abline(v = b1, lty = 2, col = 2, lwd = 2)
+hist(smpout[,2], xlim = c(0,1)); abline(v = xT_mu, lty = 2, col = 2, lwd = 2)
+hist(smpout[,3], xlim = c(0,1)); abline(v = xT_sd, lty = 2, col = 2, lwd = 2)
 
+xTest = colMeans(smpout[,(nparam+1):(nparam+n)])
+xTest_sd = apply(smpout[,(nparam+1):(nparam+n)],2,function(x) quantile(x, pnorm(c(-1,1))))
+plot(xT, xTest); abline(a = 0, b = 1, lty = 2)
+segments(xT, xTest_sd[1,], xT, xTest_sd[2,])
 
-
-
+# plot estimate for observation i
+i = 1
+hist(smpout[,(nparam+1):(nparam+n)][,i], breaks = 20, main = "xT[i]", xlim = c(0,1)); abline(v=xT[i], col = 2, lwd=2)
 
 if(FALSE) {
-  plot(res, start = 100, whichParameters = 1:2)
-  plot(res, start = 100, whichParameters = 3:4)
-  plot(res, start = 100, whichParameters = 5:6)
+  ### check for bias
+  ## parameters
+  par(mar=c(4,4,2,2), mfrow=c(2,1))
+  hist(datout[,1+nparam], breaks = 20, main = "b1", xlim = c(b1/2,b1*2)); abline(v=b1, col = 2, lwd=2)
+  hist(datout[,1+3*nparam], breaks = 20, main = "b1_naive", xlim = c(b1/2,b1*2)); abline(v=b1, col = 2, lwd=2)
   
-  round(colMeans(smpout[,1:2]),3)
-  pars
+  ## hyperparameters
+  hist(datout[,2+nparam], breaks = 20, main = "xT_mu", xlim = c(0,1)); abline(v=xT_mu, col = 2, lwd=2)
+  hist(datout[,2+3*nparam], breaks = 20, main = "xT_mu_naive", xlim = c(0,1)); abline(v=xT_mu, col = 2, lwd=2)
   
-  hist(smpout[,1], xlim = c(0,1)); abline(v = b0, lty = 2, col = 2, lwd = 2)
-  hist(smpout[,2], xlim = c(0,1)); abline(v = b1, lty = 2, col = 2, lwd = 2)
+  hist(datout[,3+nparam], breaks = 20, main = "xT_sd", xlim = c(0,1)); abline(v=xT_sd, col = 2, lwd=2)
+  hist(datout[,3+3*nparam], breaks = 20, main = "xT_sd_naive", xlim = c(0,1)); abline(v=xT_sd, col = 2, lwd=2)
   
-  hist(smpout[,3], xlim = c(0,1)); abline(v = xT_mu, lty = 2, col = 2, lwd = 2)
-  hist(smpout[,4], xlim = c(0,1)); abline(v = xT_sd, lty = 2, col = 2, lwd = 2)
+  ## diagnostics
+  par(mar=c(4,4,2,2), mfrow=c(1,1))
+  hist(datout[,1], breaks = 20, main = "Gelman b1"); abline(v=1, col = 2, lwd=2)
+  hist(datout[,2], breaks = 20, main = "Gelman xT_mu"); abline(v=1, col = 2, lwd=2)
+  hist(datout[,2], breaks = 20, main = "Gelman xT_sd"); abline(v=1, col = 2, lwd=2)
   
-  xTest = colMeans(smpout[,5:(5+n-1)])
-  xTest_sd = apply(smpout[,5:(5+n-1)],2,sd)
-  plot(xT, xTest); abline(a = 0, b = 1, lty = 2)
-  segments(xT, xTest+xTest_sd, xT, xTest-xTest_sd)
   
-  #hist(smpout[,1], breaks = 20); abline(v=b0, col = 2, lwd=2)
-  #hist(smpout[,2], breaks = 20); abline(v=b1, col = 2, lwd=2)
-  plot(smpout[,"par 1"], smpout[,"Lposterior"])
-  abline(v = b1, lty = 2)
+  ## states
+  if(vary_states) {
+    plot(truestates, stateout); abline(a = 0, b = 1, lty = 2, col = 2, lwd = 2)
+  } else {
+    xTest = colMeans(stateout)
+    xTest_sd = sqrt(colMeans((stateout*datout[,1+nparam])^2)) # apply(stateout,2,function(x) quantile(x, pnorm(c(-1,1))))
+    
+    plot(xT, xTest); abline(a = 0, b = 1, lty = 2)
+    segments(xT, xTest-xTest_sd, xT, xTest+xTest_sd)
+    
+    points(xT, xmu, col = 2)
+    
+    deltax = xO[,1]-xO[,2]
+    x_sd_est_raw = sqrt((deltax)^2/2)
+    
+    segments(xT, xmu+x_sd_est_raw, xT, xmu-x_sd_est_raw, col = 2)
+  }
+  
+  # plot individual states
+  i = 41
+  hist(stateout[,i], breaks = 20, main = "xT[i]", xlim = c(0,1)); abline(v=xT[i], col = 2, lwd=2)
 }
