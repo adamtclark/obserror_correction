@@ -1,20 +1,20 @@
 require(BayesianTools)
 rm(list=ls())
 
-set.seed(14551)
+set.seed(240904)
 doplot = FALSE
 
 ### make data
 ## parameters
 b1 = 0.2 # observation error parameters
-n = 50 # sample size
+n = 100 # sample size
 
 ## hyperparamters
-xT_mu = 0.5
+xT_mu = 0.2
 xT_sd = 0.1
 
 ## true states
-xT = rnorm(n, xT_mu, xT_sd)
+xT = rlnorm(n, xT_mu, xT_sd)
 x_sd = b1*xT # observation error sd
 
 ## observed states
@@ -67,17 +67,7 @@ likelihood <- function(param){
   
   llObservation =   sum(c(dnorm(xE-xO[,1], sd = xE*x_sd_est, log = TRUE), 
                           dnorm(xE-xO[,2], sd = xE*x_sd_est, log = TRUE)))
-  # standardised states
-  #xO_std = xO/xE
-  
-  # xE_std = xE/xmu
-  #llObservation =   sum(c(dnorm(xE_std-xO_std[,1], sd = x_sd_est, log = TRUE), 
-  #                      dnorm(xE_std-xO_std[,2], sd = x_sd_est, log = TRUE)))
-  #llObservation =   sum(dnorm(xE_std-1, sd = x_sd_est/sqrt(2), log = TRUE))
-  
-  #llObservation =   sum(c(dnorm(1-xO_std[,1], sd = x_sd_est, log = TRUE), 
-  #                      dnorm(1-xO_std[,2], sd = x_sd_est, log = TRUE)))
-  llRandomeffects = sum(dnorm(xE-xT_mu, xT_sd, log = TRUE))
+  llRandomeffects = sum(dlnorm(xE, xT_mu, xT_sd, log = TRUE))
   
   return(llObservation+llRandomeffects)
 }
@@ -120,7 +110,7 @@ for(j in 1:niter) {
   settings <- list(iterations = 2e5, consoleUpdates=1e1)
   res <- runMCMC(bayesianSetup = setup, settings = settings)
   
-  smpout = getSample(res, start = 5e4, parametersOnly=FALSE)
+  smpout = getSample(res, start = 6e4, parametersOnly=FALSE)
   xE_mu = colMeans(smpout[,1:nparam])
   xE_sd = apply(smpout[,1:nparam], 2, sd)
   
@@ -149,7 +139,7 @@ for(j in 1:niter) {
 
 ## check hyperparameter likelihood
 if(FALSE) {
-  whichrun = sample(5e4, 1)
+  whichrun = sample(dim(smpout)[1], 1)
   xE = smpout[,(nparam+1):(nparam+n)][whichrun,]
   xmusq = seq(0, 1, length = 1000)
   tmp = numeric(1000)
@@ -162,7 +152,7 @@ if(FALSE) {
 }
 
 ## plot diagnostics for a single MCMC run
-plot(res, start = 5e4, whichParameters = 1:nparam)
+plot(res, start = 6e4, whichParameters = 1:nparam)
 round(colMeans(smpout[,1:nparam]),3)
 c(b1, xT_mu, xT_sd)
 
