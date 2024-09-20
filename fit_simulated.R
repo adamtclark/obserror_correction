@@ -1,17 +1,19 @@
 require(BayesianTools)
+require(truncnorm)
+require(fitdistrplus)
 rm(list=ls())
   
 doplot = TRUE
 
-source("~/Dropbox/Rfunctions/logit_funs.R")
-source("~/Dropbox/Rfunctions/truncnorm_funs.R")
+#source("~/Dropbox/Rfunctions/logit_funs.R")
+#source("~/Dropbox/Rfunctions/truncnorm_funs.R")
 
 ### make data
 set.seed(1234)
 
 ## parameters
 b0 = 0.02
-b1 = 0.3 # observation error parameters
+b1 = 0.2 # observation error parameters
 n = 50  # sample size
 
 ## hyperparamters
@@ -19,13 +21,22 @@ xT_mu = 0.2
 xT_sd = 0.3
 
 ## true states
-xT = rtruncnorm(n, xT_mu, xT_sd)
+xT = rtruncnorm(n, a=0, b=1, mean = xT_mu, sd = xT_sd)
 x_sd = b0 + b1*xT # observation error sd
 
 ## observed states
-xO = cbind(rtruncnorm(n, xT, x_sd),
-           rtruncnorm(n, xT, x_sd))
+xO = cbind(rtruncnorm(n, a=0, b=1, xT, x_sd),
+           rtruncnorm(n, a=0, b=1, xT, x_sd))
 xmu = rowMeans(xO)
+
+fitout = fitdist(xmu, "truncnorm", fix.arg=list(a=0, b=1),
+        start = list(mean = mean(xmu), sd = sd(xmu)))
+fitout
+
+#need to think about this...
+
+
+c(etruncnorm(a=0, b=1, xT_mu, xT_sd), mean(xmu))
 
 if(doplot) {
   #dev.new()
@@ -48,18 +59,18 @@ likelihood <- function(param){
   b1 = param[2]
   
   # estimated hyperparameters
-  xT_mu = xT_mu#param[3]
-  xT_sd = xT_sd#param[4]
+  xT_mu = mean(xmu)#xT_mu#param[3]
+  xT_sd = sd(xmu)#xT_sd#param[4]
   
   # estimated states
   xE = xmu*(1+param[(nparam+1):length(param)])
   x_sd_est = b0+xE*b1
   
-  LL1 = sum(log(truncnorm(xO[,1], xE, x_sd_est, type = "density")$density))
-  LL2 = sum(log(truncnorm(xO[,2], xE, x_sd_est, type = "density")$density))
+  LL1 = sum(log(dtruncnorm(xO[,1], a=0, b=1, xE, x_sd_est)))
+  LL2 = sum(log(dtruncnorm(xO[,2], a=0, b=1, xE, x_sd_est)))
   
   llObservation =  LL1+LL2
-  llRandomeffects = sum(log(truncnorm(xE, xT_mu, xT_sd, type = "density")$density))
+  llRandomeffects = sum(log(dtruncnorm(xE, a=0, b=1, xT_mu, xT_sd)))
 
   return(llObservation+llRandomeffects)
 }
@@ -87,11 +98,6 @@ nmcmc = 5e4
 settings <- list(iterations = nmcmc, consoleUpdates=1e1)
 res <- runMCMC(bayesianSetup = setup, settings = settings)
 
-prmat = matrix(nrow =1e3, ncol = 2+n)
-lk = numeric(1e3)
-for(i in 1:1e3) {p = c(runif(2), runif(n,-1,1)); prmat[i,] = p; lk[i] = likelihood(p)}
-lk
-
 smpout = getSample(res, start = (nmcmc/3)/2, parametersOnly=FALSE)
 xE_mu = colMeans(smpout[,1:nparam])
 xE_sd = apply(smpout[,1:nparam], 2, sd)
@@ -104,8 +110,8 @@ round(colMeans(smpout[,1:nparam]),3)
 c(b0, b1, xT_mu, xT_sd)
 
 op = par(mfrow=c(3,1), mar=c(4,4,2,2))
-hist(smpout[,1], xlim = c(0,0.1)); abline(v = b0, lty = 2, col = 2, lwd = 2)
-hist(smpout[,2], xlim = c(0,1)); abline(v = b1, lty = 2, col = 2, lwd = 2)
+hist(smpout[,1], xlim = c(0,0.1), breaks = 20); abline(v = b0, lty = 2, col = 2, lwd = 2)
+hist(smpout[,2], xlim = c(0,1), breaks = 20); abline(v = b1, lty = 2, col = 2, lwd = 2)
 #hist(smpout[,3], xlim = c(0,1)); abline(v = xT_mu, lty = 2, col = 2, lwd = 2)
 #hist(smpout[,4], xlim = c(0,1)); abline(v = xT_sd, lty = 2, col = 2, lwd = 2)
 
