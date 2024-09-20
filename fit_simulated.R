@@ -1,116 +1,26 @@
 require(BayesianTools)
 rm(list=ls())
 
-set.seed(240905)
 doplot = TRUE
 
-### truncated normal functions
-#x = c(0.2, 0.6, 0.9); mu = 0.3; sigma = 0.5; a = 0; b = 1; type = c("density", "mean")
-truncnorm = function(x = NULL, mu = 0.5, sigma = 1, a = 0, b = 1, type = c("density")) {
-  #a and b are min/max values
-  #mu and sigma the mean and std. dev.
-  #x is value for which to calculate the function
-  #type can be density, cumdensity, mean, var, or std
-  
-  out = NULL
-  n = 1
-
-  xi = (x-mu)/sigma
-  alpha = (a-mu)/sigma
-  beta = (b-mu)/sigma
-  Z = pnorm(beta) - pnorm(alpha)
-
-  if(sum(type=="density")>0) {
-    out[[n]] = dnorm(xi)/(sigma*Z)
-    names(out)[n] = "density"
-    n = n+1
-  }
-  if(sum(type=="cumdensity")>0) {
-    out[[n]] = (pnorm(xi)-pnorm(alpha))/Z
-    names(out)[n] = "cumdensity"
-    n = n+1
-  }
-  if(sum(type=="mean")>0) {
-    out[[n]] = mu + sigma*(dnorm(alpha)-dnorm(beta))/Z
-    names(out)[n] = "mean"
-    n = n+1
-  }
-  if(sum(type%in%c("var", "std"))>0) {
-    tmp = sigma^2*(1-(beta*dnorm(beta)-alpha*dnorm(alpha))/Z-((dnorm(alpha)-dnorm(beta))/Z)^2)
-    if(sum(type=="var")>0) {
-      out[[n]] = tmp
-      names(out)[n] = "var"
-      n = n+1
-    }
-    if(sum(type=="std")>0) {
-      out[[n]] = sqrt(tmp)
-      names(out)[n] = "std"
-      n = n+1
-    }
-  }
-  
-  return(out)
-}
-
-rtruncnorm = function(n = 1, mu = 0.5, sigma = 1, a = 0, b = 1) {
-  #a and b are min/max values
-  #mu and sigma the mean and std. dev.
-  #n is number of draws
-  #type can be density, cumdensity, mean, var, std
-  
-  alpha = (a-mu)/sigma
-  beta = (b-mu)/sigma
-  
-  U = runif(n)
-  out = qnorm(pnorm(alpha)+U*(pnorm(beta)-pnorm(alpha)))*sigma+mu
-  return(out)
-}
-
-# check
-if(FALSE) {
-  # density
-  dx = 1e-3
-  xseq = seq(0, 1, by = dx)
-  out_dens = truncnorm(x = xseq, mu = 0.8, sigma = 0.2, a = 0, b = 1,
-                  type = "density")$density
-  plot(xseq, out_dens, type = "l")
-  sum(out_dens*dx) # should approach 1 as dx approaches zero
-  
-  # random sampler
-  out_rand = rtruncnorm(n = 1e3, mu = 0.8, sigma = 0.2, a = 0, b = 1)
-  range(out_rand)
-  dens_est = density(out_rand, from = 0, to = 1)
-  lines(dens_est, col = 2)
-  
-  # cum density
-  out_cdens = truncnorm(x = xseq, mu = 0.8, sigma = 0.2, a = 0, b = 1,
-                  type = "cumdensity")$cumdensity
-  plot(xseq, out_cdens, type = "l")
-  plot(out_cdens, cumsum(out_dens*dx)); abline(a=0, b=1, lty=2, col = "blue") # should fall on 1-1 line
-  
-  # mean
-  out_mean = truncnorm(x = xseq, mu = 0.8, sigma = 0.2, a = 0, b = 1,
-                        type = "mean")$mean
-  c(out_mean, sum(xseq*(out_dens/sum(out_dens)))) # estimated vs. calculated mean
-  
-  # variance
-  out_var = truncnorm(x = xseq, mu = 0.8, sigma = 0.5, a = 0, b = 1,
-                       type = "var")$var
-  c(out_var, sum((xseq-out_mean)^2*(out_dens/sum(out_dens)))) # estimated vs. calculated var
-}
+source("~/Dropbox/Rfunctions/logit_funs.R")
+source("~/Dropbox/Rfunctions/truncnorm_funs.R")
 
 ### make data
+set.seed(1234)
+
 ## parameters
+b0 = 0.05
 b1 = 0.2 # observation error parameters
 n = 100  # sample size
 
 ## hyperparamters
-xT_mu = 0.01
-xT_sd = 0.15
+xT_mu = logit(0.2)
+xT_sd = abs(logit(0.2))/2
 
 ## true states
-xT = rlnorm(n, xT_mu, xT_sd)
-x_sd = b1*xT # observation error sd
+xT = rnorm(n, xT_mu, xT_sd)
+x_sd = b0 + b1*ilogit(xT) # observation error sd
 
 ## observed states
 xO = cbind(rnorm(n, xT, x_sd),
@@ -118,43 +28,50 @@ xO = cbind(rnorm(n, xT, x_sd),
 xmu = rowMeans(xO)
 
 if(doplot) {
-  hist(xT)
-  plot(xT, x_sd)
-  matplot(xT, xO)
+  #dev.new()
+  hist(ilogit(xT), breaks = 20)
+  plot(ilogit(xT), x_sd); abline(a=b0, b=b1)
+  matplot(ilogit(xT), ilogit(xO))
 }
 
 
 ### fit model
-nparam = 3 # number of parameters
-# param = c(b1, xT_mu, xT_sd, xT)
+nparam = 2 # number of parameters
+# param = c(b0, b1, xT_mu, xT_sd, xT)
+param = c(b0, b1,  xT)
 
 ## likelihood function
 likelihood <- function(param){
   # estimated parameters
-  b1 = param[1]
+  b0 = param[1]
+  b1 = param[2]
   
   # estimated hyperparameters
-  xT_mu = param[2]
-  xT_sd = param[3]
+  xT_mu = xT_mu#param[3]
+  xT_sd = xT_sd#param[4]
   
   # estimated states
-  xE = param[4:length(param)]
-  x_sd_est = xE*b1
+  xE = param[(nparam+1):length(param)]
+  x_sd_est = b0+ilogit(xE)*b1
   
-  llObservation =   sum(c(dnorm(xE-xO[,1], sd = x_sd_est, log = TRUE), 
-                          dnorm(xE-xO[,2], sd = x_sd_est, log = TRUE)))
-  llRandomeffects = sum(dlnorm(xE, xT_mu, xT_sd, log = TRUE))
+  LL1 = sum(dnorm(xO[,1], xE, x_sd_est, log = TRUE))
+  LL2 = sum(dnorm(xO[,2], xE, x_sd_est, log = TRUE))
   
+  llObservation =  LL1+LL2
+  
+  llRandomeffects = sum(dnorm(xE, xT_mu, xT_sd, log = TRUE))
+
   return(llObservation+llRandomeffects)
 }
 
 ## set up Bayesian run
+#c(b0, b1, xT_mu, xT_sd, xT)
 setup <- createBayesianSetup(likelihood = likelihood,
-                             lower = c(0, 0, 0, rep(0, n)),
-                             upper = c(2, 5, 2, rep(2, n)))
+                             lower = c(0, 0, rep(-4, n)),
+                             upper = c(1, 2, rep(4, n)))
 
 ## run MCMC and save outputs
-nmcmc = 2e5
+nmcmc = 1e5
 settings <- list(iterations = nmcmc, consoleUpdates=1e1)
 res <- runMCMC(bayesianSetup = setup, settings = settings)
 
@@ -162,15 +79,17 @@ smpout = getSample(res, start = (nmcmc/3)/2, parametersOnly=FALSE)
 xE_mu = colMeans(smpout[,1:nparam])
 xE_sd = apply(smpout[,1:nparam], 2, sd)
 gelman_out = gelmanDiagnostics(res)
+gelman_out
 
 ## plot diagnostics for a single MCMC run
 plot(res, start = (nmcmc/3)/2, whichParameters = 1:nparam)
 round(colMeans(smpout[,1:nparam]),3)
-c(b1, xT_mu, xT_sd)
+c(b0, b1, xT_mu, xT_sd)
 
-hist(smpout[,1], xlim = c(0,1)); abline(v = b1, lty = 2, col = 2, lwd = 2)
-hist(smpout[,2], xlim = c(0,1)); abline(v = xT_mu, lty = 2, col = 2, lwd = 2)
-hist(smpout[,3], xlim = c(0,1)); abline(v = xT_sd, lty = 2, col = 2, lwd = 2)
+hist(smpout[,1], xlim = c(0,1)); abline(v = b0, lty = 2, col = 2, lwd = 2)
+hist(smpout[,2], xlim = c(0,1)); abline(v = b1, lty = 2, col = 2, lwd = 2)
+#hist(smpout[,3], xlim = c(0,1)); abline(v = xT_mu, lty = 2, col = 2, lwd = 2)
+#hist(smpout[,4], xlim = c(0,1)); abline(v = xT_sd, lty = 2, col = 2, lwd = 2)
 
 xTest = colMeans(smpout[,(nparam+1):(nparam+n)])
 xTest_sd = apply(smpout[,(nparam+1):(nparam+n)],2,function(x) quantile(x, pnorm(c(-1,1))))
@@ -179,4 +98,4 @@ segments(xT, xTest_sd[1,], xT, xTest_sd[2,])
 
 # plot estimate for observation i
 i = sample(n, 1)
-hist(smpout[,(nparam+1):(nparam+n)][,i], breaks = 20, main = "xT[i]", xlim = c(0,4)); abline(v=xT[i], col = 2, lwd=2)
+hist(ilogit(smpout[,(nparam+1):(nparam+n)][,i]), breaks = 20, main = "xT[i]", xlim = c(0,4)); abline(v=xT[i], col = 2, lwd=2)
