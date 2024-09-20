@@ -1,6 +1,6 @@
 require(BayesianTools)
 rm(list=ls())
-
+  
 doplot = TRUE
 
 source("~/Dropbox/Rfunctions/logit_funs.R")
@@ -10,35 +10,36 @@ source("~/Dropbox/Rfunctions/truncnorm_funs.R")
 set.seed(1234)
 
 ## parameters
-b0 = 0.05
-b1 = 0.2 # observation error parameters
-n = 100  # sample size
+b0 = 0.02
+b1 = 0.3 # observation error parameters
+n = 50  # sample size
 
 ## hyperparamters
-xT_mu = logit(0.2)
-xT_sd = abs(logit(0.2))/2
+xT_mu = 0.2
+xT_sd = 0.3
 
 ## true states
-xT = rnorm(n, xT_mu, xT_sd)
-x_sd = b0 + b1*ilogit(xT) # observation error sd
+xT = rtruncnorm(n, xT_mu, xT_sd)
+x_sd = b0 + b1*xT # observation error sd
 
 ## observed states
-xO = cbind(rnorm(n, xT, x_sd),
-           rnorm(n, xT, x_sd))
+xO = cbind(rtruncnorm(n, xT, x_sd),
+           rtruncnorm(n, xT, x_sd))
 xmu = rowMeans(xO)
 
 if(doplot) {
   #dev.new()
-  hist(ilogit(xT), breaks = 20)
-  plot(ilogit(xT), x_sd); abline(a=b0, b=b1)
-  matplot(ilogit(xT), ilogit(xO))
+  hist(xT, breaks = 20)
+  plot(xT, x_sd); abline(a=b0, b=b1)
+  matplot(xT, xO)
 }
 
 
 ### fit model
 nparam = 2 # number of parameters
-# param = c(b0, b1, xT_mu, xT_sd, xT)
-param = c(b0, b1,  xT)
+#param = c(b0, b1, xT_mu, xT_sd, xT)
+dxest = xT/xmu-1
+param = c(b0, b1, dxest)
 
 ## likelihood function
 likelihood <- function(param){
@@ -51,29 +52,45 @@ likelihood <- function(param){
   xT_sd = xT_sd#param[4]
   
   # estimated states
-  xE = param[(nparam+1):length(param)]
-  x_sd_est = b0+ilogit(xE)*b1
+  xE = xmu*(1+param[(nparam+1):length(param)])
+  x_sd_est = b0+xE*b1
   
-  LL1 = sum(dnorm(xO[,1], xE, x_sd_est, log = TRUE))
-  LL2 = sum(dnorm(xO[,2], xE, x_sd_est, log = TRUE))
+  LL1 = sum(log(truncnorm(xO[,1], xE, x_sd_est, type = "density")$density))
+  LL2 = sum(log(truncnorm(xO[,2], xE, x_sd_est, type = "density")$density))
   
   llObservation =  LL1+LL2
-  
-  llRandomeffects = sum(dnorm(xE, xT_mu, xT_sd, log = TRUE))
+  llRandomeffects = sum(log(truncnorm(xE, xT_mu, xT_sd, type = "density")$density))
 
   return(llObservation+llRandomeffects)
+}
+
+# try out likelihoods
+if(doplot) {
+  b1lst = seq(0, 1, length=1e3)
+  out = numeric(100)
+  for(i in 1:length(b1lst)) {
+    out[i] = likelihood(param = c(b0, b1lst[i], dxest))
+  }
+  plot(b1lst, out, type = "l"); abline(v = b1, lty =2)
+  abline(v = b1lst[which.max(out)], col = 2, lty = 2)
 }
 
 ## set up Bayesian run
 #c(b0, b1, xT_mu, xT_sd, xT)
 setup <- createBayesianSetup(likelihood = likelihood,
-                             lower = c(0, 0, rep(-4, n)),
-                             upper = c(1, 2, rep(4, n)))
+                             #lower = c(0, 0), upper = c(1,2))
+                             lower = c(0, 0, rep(-1, n)),
+                             upper = c(1, 1, rep(1, n)))
 
 ## run MCMC and save outputs
-nmcmc = 1e5
+nmcmc = 5e4
 settings <- list(iterations = nmcmc, consoleUpdates=1e1)
 res <- runMCMC(bayesianSetup = setup, settings = settings)
+
+prmat = matrix(nrow =1e3, ncol = 2+n)
+lk = numeric(1e3)
+for(i in 1:1e3) {p = c(runif(2), runif(n,-1,1)); prmat[i,] = p; lk[i] = likelihood(p)}
+lk
 
 smpout = getSample(res, start = (nmcmc/3)/2, parametersOnly=FALSE)
 xE_mu = colMeans(smpout[,1:nparam])
@@ -86,16 +103,19 @@ plot(res, start = (nmcmc/3)/2, whichParameters = 1:nparam)
 round(colMeans(smpout[,1:nparam]),3)
 c(b0, b1, xT_mu, xT_sd)
 
-hist(smpout[,1], xlim = c(0,1)); abline(v = b0, lty = 2, col = 2, lwd = 2)
+op = par(mfrow=c(3,1), mar=c(4,4,2,2))
+hist(smpout[,1], xlim = c(0,0.1)); abline(v = b0, lty = 2, col = 2, lwd = 2)
 hist(smpout[,2], xlim = c(0,1)); abline(v = b1, lty = 2, col = 2, lwd = 2)
 #hist(smpout[,3], xlim = c(0,1)); abline(v = xT_mu, lty = 2, col = 2, lwd = 2)
 #hist(smpout[,4], xlim = c(0,1)); abline(v = xT_sd, lty = 2, col = 2, lwd = 2)
 
-xTest = colMeans(smpout[,(nparam+1):(nparam+n)])
-xTest_sd = apply(smpout[,(nparam+1):(nparam+n)],2,function(x) quantile(x, pnorm(c(-1,1))))
-plot(xT, xTest); abline(a = 0, b = 1, lty = 2)
+xTest = rowMeans(xmu*(t(smpout[,(nparam+1):(nparam+n)])+1))
+xTest_sd = apply(xmu*(t(smpout[,(nparam+1):(nparam+n)])+1),1,function(x) quantile(x, pnorm(c(-1,1))))
+plot(xT, xTest, ylim = range(c(xTest_sd[1,], xTest_sd[2,]))); abline(a = 0, b = 1, lty = 2)
 segments(xT, xTest_sd[1,], xT, xTest_sd[2,])
+par(op)
 
 # plot estimate for observation i
 i = sample(n, 1)
-hist(ilogit(smpout[,(nparam+1):(nparam+n)][,i]), breaks = 20, main = "xT[i]", xlim = c(0,4)); abline(v=xT[i], col = 2, lwd=2)
+hist(xmu[i]*(1+smpout[,(nparam+1):(nparam+n)][,i]), breaks = 20, main = "xT[i]", xlim = c(0,1)); abline(v=xT[i], col = 2, lwd=2)
+
