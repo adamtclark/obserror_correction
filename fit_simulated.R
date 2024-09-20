@@ -10,15 +10,16 @@ truncnorm = function(x = NULL, mu = 0.5, sigma = 1, a = 0, b = 1, type = c("dens
   #a and b are min/max values
   #mu and sigma the mean and std. dev.
   #x is value for which to calculate the function
-  #type can be density, cumdensity, mean, and/or variance
+  #type can be density, cumdensity, mean, var, or std
   
+  out = NULL
+  n = 1
+
   xi = (x-mu)/sigma
   alpha = (a-mu)/sigma
   beta = (b-mu)/sigma
   Z = pnorm(beta) - pnorm(alpha)
-  
-  out = NULL
-  n = 1
+
   if(sum(type=="density")>0) {
     out[[n]] = dnorm(xi)/(sigma*Z)
     names(out)[n] = "density"
@@ -34,12 +35,34 @@ truncnorm = function(x = NULL, mu = 0.5, sigma = 1, a = 0, b = 1, type = c("dens
     names(out)[n] = "mean"
     n = n+1
   }
-  if(sum(type=="variance")>0) {
-    out[[n]] = sigma^2*(1-(beta*dnorm(beta)-alpha*dnorm(alpha))/Z-((dnorm(alpha)-dnorm(beta))/Z)^2)
-    names(out)[n] = "variance"
-    n = n+1
+  if(sum(type%in%c("var", "std"))>0) {
+    tmp = sigma^2*(1-(beta*dnorm(beta)-alpha*dnorm(alpha))/Z-((dnorm(alpha)-dnorm(beta))/Z)^2)
+    if(sum(type=="var")>0) {
+      out[[n]] = tmp
+      names(out)[n] = "var"
+      n = n+1
+    }
+    if(sum(type=="std")>0) {
+      out[[n]] = sqrt(tmp)
+      names(out)[n] = "std"
+      n = n+1
+    }
   }
   
+  return(out)
+}
+
+rtruncnorm = function(n = 1, mu = 0.5, sigma = 1, a = 0, b = 1) {
+  #a and b are min/max values
+  #mu and sigma the mean and std. dev.
+  #n is number of draws
+  #type can be density, cumdensity, mean, var, std
+  
+  alpha = (a-mu)/sigma
+  beta = (b-mu)/sigma
+  
+  U = runif(n)
+  out = qnorm(pnorm(alpha)+U*(pnorm(beta)-pnorm(alpha)))*sigma+mu
   return(out)
 }
 
@@ -48,31 +71,33 @@ if(FALSE) {
   # density
   dx = 1e-3
   xseq = seq(0, 1, by = dx)
-  out_dens = truncnorm(x = xseq, mu = 0.2, sigma = 0.5, a = 0, b = 1,
+  out_dens = truncnorm(x = xseq, mu = 0.8, sigma = 0.2, a = 0, b = 1,
                   type = "density")$density
   plot(xseq, out_dens, type = "l")
-  sum(out_dens*dx)
+  sum(out_dens*dx) # should approach 1 as dx approaches zero
+  
+  # random sampler
+  out_rand = rtruncnorm(n = 1e3, mu = 0.8, sigma = 0.2, a = 0, b = 1)
+  range(out_rand)
+  dens_est = density(out_rand, from = 0, to = 1)
+  lines(dens_est, col = 2)
   
   # cum density
-  out_cdens = truncnorm(x = xseq, mu = 0.2, sigma = 0.5, a = 0, b = 1,
+  out_cdens = truncnorm(x = xseq, mu = 0.8, sigma = 0.2, a = 0, b = 1,
                   type = "cumdensity")$cumdensity
   plot(xseq, out_cdens, type = "l")
-  plot(out_cdens, cumsum(out_dens*dx)); abline(a=0, b=1, lty=2, col = "blue")
+  plot(out_cdens, cumsum(out_dens*dx)); abline(a=0, b=1, lty=2, col = "blue") # should fall on 1-1 line
   
   # mean
-  out_mean = truncnorm(x = xseq, mu = 0.2, sigma = 0.5, a = 0, b = 1,
+  out_mean = truncnorm(x = xseq, mu = 0.8, sigma = 0.2, a = 0, b = 1,
                         type = "mean")$mean
-  c(out_mean, sum(xseq*(out_dens/sum(out_dens))))
+  c(out_mean, sum(xseq*(out_dens/sum(out_dens)))) # estimated vs. calculated mean
   
   # variance
-  out_var = truncnorm(x = xseq, mu = 0.2, sigma = 0.5, a = 0, b = 1,
-                       type = "variance")$variance
-  c(out_var, sum((xseq-out_mean)^2*(out_dens/sum(out_dens))))
+  out_var = truncnorm(x = xseq, mu = 0.8, sigma = 0.5, a = 0, b = 1,
+                       type = "var")$var
+  c(out_var, sum((xseq-out_mean)^2*(out_dens/sum(out_dens)))) # estimated vs. calculated var
 }
-
-## make inverse functions?
-## make random number sampler
-
 
 ### make data
 ## parameters
