@@ -8,6 +8,19 @@ doplot = TRUE
 #source("~/Dropbox/Rfunctions/logit_funs.R")
 #source("~/Dropbox/Rfunctions/truncnorm_funs.R")
 
+
+### next steps
+# try brms implementation
+# try to add in probability of zeros
+
+### notes?
+# Forecast richness at a scale, and then estimate expected error effects and true changes. 
+# Maybe add in prior from Emma? 
+# Assumption: SAR, plus that abundance distribution is scale invariant 
+# Add in distance matrix option (taxonomic, phylo, etc.)
+# Use abundance distribution to estimate gains and losses
+
+
 ### make data
 set.seed(1234)
 
