@@ -12,13 +12,13 @@ doplot = TRUE
 set.seed(1234)
 
 ## parameters
-b0 = 0.02
+b0 = 0.01
 b1 = 0.2 # observation error parameters
 n = 50  # sample size
 
 ## hyperparamters
 xT_mu = 0.2
-xT_sd = 0.3
+xT_sd = 0.2
 
 ## true states
 xT = rtruncnorm(n, a=0, b=1, mean = xT_mu, sd = xT_sd)
@@ -40,6 +40,7 @@ c(etruncnorm(a=0, b=1, xT_mu, xT_sd), mean(xmu))
 
 if(doplot) {
   #dev.new()
+  par(mfrow=c(3,1), mar=c(4,4,2,2))
   hist(xT, breaks = 20)
   plot(xT, x_sd); abline(a=b0, b=b1)
   matplot(xT, xO)
@@ -47,10 +48,10 @@ if(doplot) {
 
 
 ### fit model
-nparam = 2 # number of parameters
+nparam = 4 # number of parameters
 #param = c(b0, b1, xT_mu, xT_sd, xT)
 dxest = xT/xmu-1
-param = c(b0, b1, dxest)
+param = c(b0, b1, xT_mu, xT_sd, dxest)
 
 ## likelihood function
 likelihood <- function(param){
@@ -59,8 +60,8 @@ likelihood <- function(param){
   b1 = param[2]
   
   # estimated hyperparameters
-  xT_mu = mean(xmu)#xT_mu#param[3]
-  xT_sd = sd(xmu)#xT_sd#param[4]
+  xT_mu = param[3]#xT_mu#mean(xmu)#
+  xT_sd = param[4]#xT_sd#sd(xmu)#
   
   # estimated states
   xE = xmu*(1+param[(nparam+1):length(param)])
@@ -77,12 +78,21 @@ likelihood <- function(param){
 
 # try out likelihoods
 if(doplot) {
+  par(mfrow=c(2,1))
+  b0lst = seq(0, 1, length=1e3)
+  out = numeric(100)
+  for(i in 1:length(b0lst)) {
+    out[i] = likelihood(param = c(b0lst[i], b1, xT_mu, xT_sd, dxest))
+  }
+  plot(b0lst, out, ylim=quantile(out, c(0.5, 1)), type = "l"); abline(v = b0, lty =2)
+  abline(v = b0lst[which.max(out)], col = 2, lty = 2)
+  
   b1lst = seq(0, 1, length=1e3)
   out = numeric(100)
   for(i in 1:length(b1lst)) {
-    out[i] = likelihood(param = c(b0, b1lst[i], dxest))
+    out[i] = likelihood(param = c(b0, b1lst[i], xT_mu, xT_sd, dxest))
   }
-  plot(b1lst, out, type = "l"); abline(v = b1, lty =2)
+  plot(b1lst, out, ylim=quantile(out, c(0.5, 1)), type = "l"); abline(v = b1, lty =2)
   abline(v = b1lst[which.max(out)], col = 2, lty = 2)
 }
 
@@ -90,8 +100,8 @@ if(doplot) {
 #c(b0, b1, xT_mu, xT_sd, xT)
 setup <- createBayesianSetup(likelihood = likelihood,
                              #lower = c(0, 0), upper = c(1,2))
-                             lower = c(0, 0, rep(-1, n)),
-                             upper = c(1, 1, rep(1, n)))
+                             lower = c(0, 0, 0, 0, rep(-1, n)),
+                             upper = c(1, 1, 1, 1, rep(1, n)))
 
 ## run MCMC and save outputs
 nmcmc = 5e4
@@ -109,17 +119,18 @@ plot(res, start = (nmcmc/3)/2, whichParameters = 1:nparam)
 round(colMeans(smpout[,1:nparam]),3)
 c(b0, b1, xT_mu, xT_sd)
 
-op = par(mfrow=c(3,1), mar=c(4,4,2,2))
+par(mfrow=c(4,1), mar=c(4,4,2,2))
 hist(smpout[,1], xlim = c(0,0.1), breaks = 20); abline(v = b0, lty = 2, col = 2, lwd = 2)
 hist(smpout[,2], xlim = c(0,1), breaks = 20); abline(v = b1, lty = 2, col = 2, lwd = 2)
-#hist(smpout[,3], xlim = c(0,1)); abline(v = xT_mu, lty = 2, col = 2, lwd = 2)
-#hist(smpout[,4], xlim = c(0,1)); abline(v = xT_sd, lty = 2, col = 2, lwd = 2)
+hist(smpout[,3], xlim = c(0,1)); abline(v = xT_mu, lty = 2, col = 2, lwd = 2)
+hist(smpout[,4], xlim = c(0,1)); abline(v = xT_sd, lty = 2, col = 2, lwd = 2)
 
+par(mfrow=c(1,1))
 xTest = rowMeans(xmu*(t(smpout[,(nparam+1):(nparam+n)])+1))
 xTest_sd = apply(xmu*(t(smpout[,(nparam+1):(nparam+n)])+1),1,function(x) quantile(x, pnorm(c(-1,1))))
 plot(xT, xTest, ylim = range(c(xTest_sd[1,], xTest_sd[2,]))); abline(a = 0, b = 1, lty = 2)
 segments(xT, xTest_sd[1,], xT, xTest_sd[2,])
-par(op)
+
 
 # plot estimate for observation i
 i = sample(n, 1)
