@@ -1,6 +1,7 @@
 require(brms)
 require(BayesianTools)
 rm(list=ls())
+set.seed(12322)
 
 # parameters
 N=200 # number of species
@@ -15,6 +16,8 @@ gamma1=4    # logit slope (detection prob)
 #generate the cover values for every iteration
 y.mat <- matrix(rbinom(N, 1, psi)*rbeta(N, mu*phi, (1-mu)*phi), 
                 nrow=N, ncol=1)
+
+par(mfrow=c(1,1), mar=c(4,4,2,2))
 hist(y.mat, breaks = 20)
 xT = y.mat[,1]
 
@@ -154,22 +157,27 @@ likelihood <- function(param){
   
   ## likelihoods
   # X|Z: observed presence given true presence
-  p_XgZy = plogis(xT_gamma0+xT_gamma1*y)
-  LL_XgZy = matrix(nrow = length(y), ncol = 2)
-  LL_XgZy[Z,] = dbinom(X[Z,], 1, p_XgZy[Z], log = TRUE)
+  #p_XgZy = plogis(xT_gamma0+xT_gamma1*y)
+  #LL_XgZy = matrix(nrow = length(y), ncol = 2)
+  #LL_XgZy[Z,] = dbinom(X[Z,], 1, p_XgZy[Z], log = TRUE)
   
   # Z
-  LL_Z = dbinom(Z*1,1,xT_zi, log = TRUE)
+  #LL_Z = dbinom(Z*1,1,xT_zi, log = TRUE)
   
-  #LL_PA = matrix(nrow = length(y), ncol = J)
-  #p_XgZy = plogis(xT_gamma0+xT_gamma1*y)
-  #for(j in 1:J) {
-  #  # observed presence (exists and was found)
-  #  LL_PA[X[,j],j] = log(xT_zi) + log(p_XgZy[X[,j]])
-  #  
-  #  # observed absence (exists but was not found, or does not exist)
-  #  LL_PA[!X[,j],j] = log(exp(log(xT_zi) + log(1-p_XgZy[!X[,j]])) + (1-xT_zi))
-  #}
+  LL_PA = matrix(nrow = length(y), ncol = J)
+  p_XgZy = plogis(xT_gamma0+xT_gamma1*y)
+  for(j in 1:J) {
+    # observed presence (exists and was found)
+    LL_PA[X[,j],j] = log(xT_zi) + log(p_XgZy[X[,j]])
+    
+    # observed absence (exists but was not found)
+    LL_PA[!X[,j] & Z,j] = log(xT_zi) + log(1-p_XgZy[!X[,j] & Z])
+    
+    # observed absence (does not exist)
+    LL_PA[!X[,j] & !Z,j] = log(1-xT_zi)
+    
+    #LL_PA[!X[,j],j] = log(exp(log(xT_zi) + log(1-p_XgZy[!X[,j]])) + (1-xT_zi))
+  }
   
   # U|X: observed cover given observed presence
   #LL_UgXy = matrix(nrow = length(y), ncol = J)
@@ -187,8 +195,8 @@ likelihood <- function(param){
   
   # total
   LL_tot = sum(LL_UgXy, na.rm=TRUE)+sum(LL_ygZ, na.rm=TRUE)+
-  #sum(LL_PA, na.rm=TRUE)
-  sum(LL_XgZy, na.rm=T)+sum(LL_Z, na.rm=TRUE)
+  sum(LL_PA, na.rm=TRUE)
+  #sum(LL_XgZy, na.rm=T)+sum(LL_Z, na.rm=TRUE)
   
   return(LL_tot)
 }
