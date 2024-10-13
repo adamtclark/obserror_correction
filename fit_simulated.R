@@ -1,12 +1,12 @@
 require(BayesianTools)
-require(truncnorm)
-require(fitdistrplus)
+#require(truncnorm)
+#require(fitdistrplus)
 rm(list=ls())
   
 doplot = TRUE
 
 #source("~/Dropbox/Rfunctions/logit_funs.R")
-#source("~/Dropbox/Rfunctions/truncnorm_funs.R")
+source("~/Dropbox/Rfunctions/truncnorm_funs.R")
 
 
 ### next steps
@@ -22,19 +22,20 @@ doplot = TRUE
 
 
 ### make data
-set.seed(1234)
+set.seed(23432)
 
 ## parameters
-b0 = 0.01
-b1 = 0.2 # observation error parameters
+b0 = 0.02
+b1 = 0.3 # observation error parameters
 n = 50  # sample size
 
 ## hyperparamters
-xT_mu = 0.2
-xT_sd = 0.2
+xT_mu = 0.4
+xT_sd = 0.3
 
 ## true states
-xT = rtruncnorm(n, a=0, b=1, mean = xT_mu, sd = xT_sd)
+#xT = rtruncnorm(n, a=0, b=1, mean = xT_mu, sd = xT_sd)
+xT = rtruncnorm(n, a=0, b=1, mu = xT_mu, sigma = xT_sd)
 x_sd = b0 + b1*xT # observation error sd
 
 ## observed states
@@ -42,14 +43,12 @@ xO = cbind(rtruncnorm(n, a=0, b=1, xT, x_sd),
            rtruncnorm(n, a=0, b=1, xT, x_sd))
 xmu = rowMeans(xO)
 
-fitout = fitdist(xmu, "truncnorm", fix.arg=list(a=0, b=1),
-        start = list(mean = mean(xmu), sd = sd(xmu)))
-fitout
-
+#fitout = fitdist(xmu, "truncnorm", fix.arg=list(a=0, b=1),
+#        start = list(mean = mean(xmu), sd = sd(xmu)))
+#fitout
 #need to think about this...
 
-
-c(etruncnorm(a=0, b=1, xT_mu, xT_sd), mean(xmu))
+c(truncnorm(a=0, b=1, mu = xT_mu, sigma = xT_sd, type = "mean")$mean, mean(xmu))
 
 if(doplot) {
   #dev.new()
@@ -80,11 +79,11 @@ likelihood <- function(param){
   xE = xmu*(1+param[(nparam+1):length(param)])
   x_sd_est = b0+xE*b1
   
-  LL1 = sum(log(dtruncnorm(xO[,1], a=0, b=1, xE, x_sd_est)))
-  LL2 = sum(log(dtruncnorm(xO[,2], a=0, b=1, xE, x_sd_est)))
+  LL1 = sum(log(truncnorm(x = xO[,1], a=0, b=1, mu = xE, sigma = x_sd_est, type = "density")$density))
+  LL2 = sum(log(truncnorm(x = xO[,2], a=0, b=1, mu = xE, sigma = x_sd_est, type = "density")$density))
   
   llObservation =  LL1+LL2
-  llRandomeffects = sum(log(dtruncnorm(xE, a=0, b=1, xT_mu, xT_sd)))
+  llRandomeffects = sum(log(truncnorm(x = xE, a=0, b=1, mu = xT_mu, sigma = xT_sd, type = "density")$density))
 
   return(llObservation+llRandomeffects)
 }
@@ -133,10 +132,10 @@ round(colMeans(smpout[,1:nparam]),3)
 c(b0, b1, xT_mu, xT_sd)
 
 par(mfrow=c(4,1), mar=c(4,4,2,2))
-hist(smpout[,1], xlim = c(0,0.1), breaks = 20); abline(v = b0, lty = 2, col = 2, lwd = 2)
+hist(smpout[,1], xlim = c(0,1), breaks = 20); abline(v = b0, lty = 2, col = 2, lwd = 2)
 hist(smpout[,2], xlim = c(0,1), breaks = 20); abline(v = b1, lty = 2, col = 2, lwd = 2)
-hist(smpout[,3], xlim = c(0,1)); abline(v = xT_mu, lty = 2, col = 2, lwd = 2)
-hist(smpout[,4], xlim = c(0,1)); abline(v = xT_sd, lty = 2, col = 2, lwd = 2)
+hist(smpout[,3], xlim = c(0,1), breaks = 20); abline(v = xT_mu, lty = 2, col = 2, lwd = 2)
+hist(smpout[,4], xlim = c(0,1), breaks = 20); abline(v = xT_sd, lty = 2, col = 2, lwd = 2)
 
 par(mfrow=c(1,1))
 xTest = rowMeans(xmu*(t(smpout[,(nparam+1):(nparam+n)])+1))
@@ -144,8 +143,67 @@ xTest_sd = apply(xmu*(t(smpout[,(nparam+1):(nparam+n)])+1),1,function(x) quantil
 plot(xT, xTest, ylim = range(c(xTest_sd[1,], xTest_sd[2,]))); abline(a = 0, b = 1, lty = 2)
 segments(xT, xTest_sd[1,], xT, xTest_sd[2,])
 
+cor(xT, xmu)
+cor(xT, xTest)
 
 # plot estimate for observation i
 i = sample(n, 1)
 hist(xmu[i]*(1+smpout[,(nparam+1):(nparam+n)][,i]), breaks = 20, main = "xT[i]", xlim = c(0,1)); abline(v=xT[i], col = 2, lwd=2)
+
+
+################ Repeat same analysis in brms
+
+require(brms)
+moddat = data.frame(rep = 1:nrow(xO), xO1 = xO[,1], xO2 = xO[,2], xOmu = xmu)
+medat = data.frame(rep = 1:nrow(moddat), obs = c(moddat$xO1, moddat$xO2), xmu = moddat$xOmu)
+
+prior_use = prior(normal(-2, 2), nlpar = "b0") + prior(normal(-2, 2), nlpar = "b1")
+brm_out_0 <- brm(bf(obs ~ xT, nl = TRUE) +
+                   lf(xT | trunc(lb = 0, ub = 1) ~ (1|rep)) +
+                   nlf(sigma ~ log(exp(b0) + exp(b1)*xT)) +
+                   lf(b0 ~ 1) +
+                   lf(b1 ~ 1),
+                 data = medat, family = gaussian(), prior = prior_use,
+                 cores = 4, iter = 4000,
+                 #save_pars = save_pars(all = TRUE),
+                 control = list(adapt_delta = 0.85))
+
+brm_out_0 <- brm(bf(obs ~ xT, nl = TRUE) +
+                   lf(xT | trunc(lb = 0, ub = 1) ~ -1+(xmu+1|rep)) +
+                   nlf(sigma ~ log(exp(b0) + exp(b1)*xT)) +
+                   lf(b0 ~ 1) +
+                   lf(b1 ~ 1),
+                 data = medat, family = gaussian(), prior = prior_use,
+                 cores = 4, iter = 4000,
+                 #save_pars = save_pars(all = TRUE),
+                 control = list(adapt_delta = 0.85))
+
+medat2 = medat
+medat2$xT = xT
+brm_out_0 <- brm(bf(obs ~ xT, nl = TRUE) +
+                   nlf(sigma ~ log(exp(b0) + exp(b1)*xT)) +
+                   lf(b0 ~ 1) +
+                   lf(b1 ~ 1),
+                 data = medat2, family = gaussian(), prior = prior_use,
+                 cores = 4, iter = 4000,
+                 #save_pars = save_pars(all = TRUE),
+                 control = list(adapt_delta = 0.85))
+
+
+summary(brm_out_0)
+exp(fixef(brm_out_0)[,c(1, 3:4)])
+c(b0, b1)
+
+fixef(brm_out_0)[1,c(1, 3:4)]
+truncnorm(a=0, b=1, mu = xT_mu, sigma = xT_sd, type = "mean")$mean
+
+plot(brm_out_0)
+
+fit_out = fitted(brm_out_0)
+#plot(fit_out[1:50,1], fit_out[51:100,1])
+xTest = fit_out[1:50,1]
+plot(xT, xTest)
+points(xT, xmu, col = 2)
+cor(xT, xmu)
+cor(xT, xTest)
 
