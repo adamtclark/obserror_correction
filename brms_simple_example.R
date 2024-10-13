@@ -160,9 +160,9 @@ likelihood <- function(param){
   
   # Z
   LL_Z = dbinom(Z*1,1,xT_zi, log = TRUE)
-  p_XgZy = plogis(xT_gamma0+xT_gamma1*y)
   
   #LL_PA = matrix(nrow = length(y), ncol = J)
+  #p_XgZy = plogis(xT_gamma0+xT_gamma1*y)
   #for(j in 1:J) {
   #  # observed presence (exists and was found)
   #  LL_PA[X[,j],j] = log(xT_zi) + log(p_XgZy[X[,j]])
@@ -172,14 +172,14 @@ likelihood <- function(param){
   #}
   
   # U|X: observed cover given observed presence
-  LL_UgXy = matrix(nrow = length(y), ncol = J)
-  for(j in 1:J) {
-    # observed presence
-    LL_UgXy[X[,j],j] = dnorm(qlogis(xO[X[,j],j]), qlogis(y[X[,j]]), xT_sigma, log = TRUE)
-  }
-  #ps = X[,1] & X[,2]
-  #delta_x = (qlogis(xO[ps,1])-qlogis(xO[ps,2]))
-  #LL_UgXy = dnorm(delta_x, 0, xT_sigma*sqrt(2), log = TRUE)
+  #LL_UgXy = matrix(nrow = length(y), ncol = J)
+  #for(j in 1:J) {
+  #  # observed presence
+  #  LL_UgXy[X[,j],j] = dnorm(qlogis(xO[X[,j],j]), qlogis(y[X[,j]]), xT_sigma, log = TRUE)
+  #}
+  ps = X[,1] & X[,2]
+  delta_x = (qlogis(xO[ps,1])-qlogis(xO[ps,2]))
+  LL_UgXy = dnorm(delta_x, 0, xT_sigma*sqrt(2), log = TRUE)
   
   # Y|Z
   LL_ygZ = rep(NA, length(y))
@@ -204,17 +204,16 @@ res <- runMCMC(bayesianSetup = setup, settings = settings)
 smpout = getSample(res, start = (nmcmc/3)/2, parametersOnly=FALSE)
 apply(smpout[,1:6],2,function(x) quantile(x, c(0.025, 0.5, 0.957)))
 c(mu, phi, psi, sigma, gamma0, gamma1)
-################## pick up from here
 
 par(mfrow=c(3,2), mar=c(4,4,2,2))
-hist(smpout[,1], breaks = 20, main = "mu"); abline(v = mu, lty=2, col = 2, lwd = 2)
-hist(smpout[,2], breaks = 20, main = "phi"); abline(v = phi, lty=2, col = 2, lwd = 2)
-hist(smpout[,3], breaks = 20, main = "psi"); abline(v = psi, lty=2, col = 2, lwd = 2)
-hist(smpout[,4], breaks = 20, main = "sigma"); abline(v = sigma, lty=2, col = 2, lwd = 2)
-hist(smpout[,5], breaks = 20, main = "gamma0"); abline(v = gamma0, lty=2, col = 2, lwd = 2)
-hist(smpout[,6], breaks = 20, main = "gamma1"); abline(v = gamma1, lty=2, col = 2, lwd = 2)
+hist(smpout[,1], breaks = 20, main = "mu", xlim = c(0,1)); abline(v = mu, lty=2, col = 2, lwd = 2)
+hist(smpout[,2], breaks = 20, main = "phi", xlim = c(0,2)); abline(v = phi, lty=2, col = 2, lwd = 2)
+hist(smpout[,3], breaks = 20, main = "psi", xlim = c(0,1)); abline(v = psi, lty=2, col = 2, lwd = 2)
+hist(smpout[,4], breaks = 20, main = "sigma", xlim = c(0,1)); abline(v = sigma, lty=2, col = 2, lwd = 2)
+hist(smpout[,5], breaks = 20, main = "gamma0", xlim = c(-3,3)); abline(v = gamma0, lty=2, col = 2, lwd = 2)
+hist(smpout[,6], breaks = 20, main = "gamma1", xlim = c(-3,10)); abline(v = gamma1, lty=2, col = 2, lwd = 2)
 
-
+################## pick up from here - think about how to remove y from above?
 
 
 
