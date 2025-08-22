@@ -1,3 +1,6 @@
+#### TODO:
+# try posterior_epred?
+
 setwd("~/Dropbox/Projects/117_ObservationError/src")
 rm(list = ls())
 require(brms)
@@ -23,7 +26,7 @@ mod_c0 <- brm(bf(cov_cv ~ cov_mean + (1|SITE_CODE),
               data = d, family = hurdle_lognormal(), cores = 2)
 mod_c0 # R-hats all <= 1.01
 #plot(mod_c0)
-pred_c = predict(mod_c0, re_formula = ~ 0, newdata = data.frame(cov_mean = xsq))
+pred_c = posterior_epred(mod_c0, re_formula = ~ 0, newdata = data.frame(cov_mean = xsq))
 
 par(mar=c(4,4,2,2))
 plot((d$cov_mean), d$cov_cv,

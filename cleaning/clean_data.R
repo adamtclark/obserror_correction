@@ -1,7 +1,7 @@
 setwd("~/Dropbox/Projects/117_ObservationError/src/cleaning/")
 rm(list = ls())
 
-d = read.csv("../data/cleaning/NutNet_ReSurvey_nometadat_2023.csv")
+d = read.csv("../data/cleaning/NutNet_ReSurvey_nometadat_2023.csv", encoding = "UTF8")
 nutnet_data = read.csv("../data/cleaning/comb-by-plot_2025-08-20.csv")
 
 # merge plot, block, and treatment
@@ -53,6 +53,7 @@ for(i in 1:length(site_index)) {
 
 missing = sort(unique(d$SITE_CODE[is.na(d$continent)]))
 missing
+
 
 # set trt to control if no treatment started yet
 d$YEAR = as.numeric(substr(d$DATE, 7,10))
@@ -142,6 +143,11 @@ d$SPECIES[d$SPECIES%in%c("symphyotrichym ericoides")] = "symphyotrichum ericoide
 d$SPECIES[d$SPECIES%in%c("symphyotrichym oblongifolium")] = "symphyotrichum oblongifolium"
 d$SPECIES[d$SPECIES%in%c("verbascum thaspis")] = "verbascum thapsus"
 d$SPECIES[d$SPECIES%in%c("vernona baldwinii")] = "vernonia baldwinii"
+d$SPECIES[d$SPECIES%in%c("amelanchier lamarchii")] = "amelanchier lamarckii"
+d$SPECIES[d$SPECIES%in%c("campanula padula")] = "campanula patula"
+d$SPECIES[d$SPECIES%in%c("lactuca seriola")] = "lactuca serriola"
+d$SPECIES[d$SPECIES%in%c("paucedanum ostoselium")] = "oreoselinum nigrum"
+d$SPECIES[d$SPECIES%in%c("prunus spec.")] = "prunus sp"
 
 d$SPECIES = gsub("spp.", "sp", d$SPECIES)
 

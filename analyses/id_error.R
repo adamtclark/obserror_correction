@@ -1,5 +1,4 @@
 ########## TODO:
-# bayr.de data missing
 # temple.us - very high error rate
 ##################################
 
