@@ -205,6 +205,9 @@ write.csv(sp_families, "../data/cleaning/family_lookup.csv", row.names = FALSE)
 # update with WCVP taxonomy
 d$SPECIES=sp_families$corrected[match(d$SPECIES, sp_families$species)]
 
+# remove seasonal survys
+d = d[d$SEASON!="early",]
+
 # reshape to multiple columns per survey
 tmp = paste(d$SITE, d$SURVEY_ID, d$RESURVEY, d$SPECIES, d$plot)
 max(table(tmp)) # should be 1
@@ -242,10 +245,19 @@ for(i in 1:length(site_index)) {
     cover = d$COVER[ps2][match(paste(tmp$species, tmp$plot), paste(d$SPECIES[ps2], d$plot[ps2]))]
     surveyor = ((d$SURVEY_ID[ps2][match(paste(tmp$species, tmp$plot), paste(d$SPECIES[ps2], d$plot[ps2]))]))
     date = ((d$DATE[ps2][match(paste(tmp$species, tmp$plot), paste(d$SPECIES[ps2], d$plot[ps2]))]))
+    surveyed_plot = tmp$plot
     
     # add in true zeros
     surveyed_plots = d$plot[ps2]
     cover[tmp$plot%in%surveyed_plots & is.na(cover)] = 0
+    
+    plot_surveyor = data.frame(plot = surveyed_plots, surveyor = NA, date = NA)
+    for(k in 1:nrow(plot_surveyor)) {
+      plot_surveyor$surveyor[k] = paste(sort(unique(surveyor[surveyed_plot==plot_surveyor$plot[k]])), collapse = "__")
+      plot_surveyor$date[k] = paste(sort(unique(date[surveyed_plot==plot_surveyor$plot[k]])), collapse = "__")
+    }
+    surveyor = plot_surveyor$surveyor[match(surveyed_plot, plot_surveyor$plot)]
+    date = plot_surveyor$date[match(surveyed_plot, plot_surveyor$plot)]
     
     tmp[,paste("cover", j, sep = "_")] = cover
     tmp[,paste("surveyor", j, sep = "_")] = surveyor
