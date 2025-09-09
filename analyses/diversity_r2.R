@@ -1,5 +1,9 @@
+# TODO: permutation test for r2, and slope, and prediction interval?
+
+
 setwd("~/Dropbox/Projects/117_ObservationError/src")
 rm(list = ls())
+require(lmodel2)
 #require(brms)
 
 collst = c("purple", "forestgreen", "dodgerblue3", "firebrick")
@@ -43,8 +47,47 @@ d_resurvey_ag = with(d_resurvey[!d_resurvey$species%in%c("bare ground", "litter"
                       first_nutrient_year = first_nutrient_year,
                       block = block, plot = plot),
             FUN = function(x) hillfun(x, q = 0)))
-agfun = function(q) {
-  with(d_resurvey[!d_resurvey$species%in%c("bare ground", "litter", "cryptogam"),], aggregate(list(div_1 = cover_1,
+agfun = function(q, ps_agg = NULL, survey_type = "same") {
+  if(is.null(ps_agg)) {
+    ps_agg = 1:nrow(d_resurvey)
+  }
+  tmp = d_resurvey[ps_agg,]
+  if(survey_type=="same") {
+    covdat = tmp[,grep("cover_", colnames(tmp))]
+    covdat = covdat/100
+    
+    surveyor = tmp[,grep("surveyor_", colnames(tmp))]
+    ps_cv = surveyor!=surveyor[,1]
+    ps_cv[is.na(ps_cv)] = TRUE
+    
+    covdat_same = covdat
+    covdat_same[ps_cv] = NA
+    
+    # remove cases with all zeros
+    covdat_same[which(rowSums(covdat_same, na.rm=TRUE)==0),] = NA
+    
+    # add back to data
+    tmp[,grep("cover_", colnames(tmp))] = covdat_same
+  } else if(survey_type=="different") {
+    covdat = tmp[,grep("cover_", colnames(tmp))]
+    covdat = covdat/100
+    
+    surveyor = tmp[,grep("surveyor_", colnames(tmp))]
+    ps_cv = surveyor==surveyor[,1]
+    ps_cv[,-1][is.na(ps_cv[,-1])] = TRUE
+    ps_cv[,1][!is.na(ps_cv[,1])] = FALSE
+    
+    covdat_diff = covdat
+    covdat_diff[ps_cv] = NA
+    
+    # remove cases with all zeros
+    covdat_diff[which(rowSums(covdat_diff, na.rm=TRUE)==0),] = NA
+    
+    # add back to data
+    tmp[,grep("cover_", colnames(tmp))] = covdat_diff
+  }
+  
+  with(tmp, aggregate(list(div_1 = cover_1,
              div_2 = cover_2,
              div_3 = cover_3,
              div_4 = cover_4),
@@ -54,59 +97,77 @@ agfun = function(q) {
         FUN = function(x) hillfun(x, q = q)))
 }
 
-plot_sites_fun = function(agdat, nameslist = c("div_1", "div_2", "div_3"), alphalevel = 0.2) {
-  stlst = sort(unique(agdat$SITE_CODE))
+plot_sites_fun = function(agdat, ps = NULL, nameslist = c("div_1", "div_2", "div_3", "div_4"), coluse = "black") {
   require(lmodel2)
   
-  colnames(agdat)[which(colnames(agdat) %in% nameslist)] = c("div_1", "div_2", "div_3")
+  colnames(agdat)[which(colnames(agdat) %in% nameslist)] = nameslist
   
-  slope_lst = matrix(nrow = length(stlst), ncol = 3, data = NA)
+  if(is.null(ps)) {
+    ps = 1:nrow(agdat)
+  }
+  xsq = seq(min(agdat$div_1[ps], na.rm=TRUE), max(agdat$div_1[ps], na.rm=TRUE), length=100)
   
-  suppressWarnings({
-    for(i in 1:length(stlst)) {
-      ps = which(agdat$SITE_CODE == stlst[i])
-      xsq = seq(min(agdat$div_1[ps], na.rm=TRUE), max(agdat$div_1[ps], na.rm=TRUE), length=100)
-      collst = viridis(3)
-      collst2 = adjustcolor(viridis(3), alpha.f = alphalevel)
-      
-      if(sum(!is.na(agdat$div_2[ps]+agdat$div_1[ps]))>2) {
-        mod1 = suppressMessages(lmodel2(div_2~div_1, agdat[ps,], "relative", "relative"))
-        pd1 = mod1$regression.results[4,2]+mod1$regression.results[4,3]*xsq
-        #predict(mod1, newdata = data.frame(div_1=xsq))
-        lines(xsq, pd1, col = collst2[1])
-        slope_lst[i,1] = mod1$regression.results[4,3]
-      }
-      
-      if(sum(!is.na(agdat$div_3[ps]+agdat$div_1[ps]))>2) {
-        mod2 = suppressMessages(lmodel2(div_3~div_1, agdat[ps,], "relative", "relative"))
-        pd2 = mod2$regression.results[4,2]+mod2$regression.results[4,3]*xsq
-        #predict(mod1, newdata = data.frame(div_1=xsq))
-        lines(xsq, pd2, col = collst2[2])
-        slope_lst[i,2] = mod2$regression.results[4,3]
-      }
-      if(sum(!is.na(agdat$div_4[ps]+agdat$div_1[ps]))>2) {
-        mod3 = suppressMessages(lmodel2(div_4~div_1, agdat[ps,], "relative", "relative"))
-        pd3 = mod3$regression.results[4,2]+mod3$regression.results[4,3]*xsq
-        #predict(mod1, newdata = data.frame(div_1=xsq))
-        lines(xsq, pd3, col = collst2[3])
-        slope_lst[i,3] = mod3$regression.results[4,3]
-      }
-    }})
-  return(slope_lst)
+  obs_1 = rep(agdat$div_1[ps], 3)
+  obs_2 = c(agdat$div_2[ps], agdat$div_3[ps], agdat$div_4[ps])
+  moddat = data.frame(obs_2 = obs_2, obs_1 = obs_1)
+  
+  mod = suppressMessages(lmodel2(obs_2~obs_1, moddat, "relative", "relative"))
+  pd1 = mod$regression.results[4,2]+mod$regression.results[4,3]*xsq
+  
+  slope = unlist(c(mod$regression.results[4,3], mod$confidence.intervals[4,4:5]))
+  
+  # add in CI
+  x_mu = mean(obs_1[!is.na(obs_1) & !is.na(obs_2)])
+  y_mu = mean(obs_2[!is.na(obs_1) & !is.na(obs_2)])
+  
+  b0_low = y_mu-slope[2]*x_mu
+  b0_hi = y_mu-slope[3]*x_mu
+  
+  pd2 = b0_low+slope[2]*xsq
+  pd3 = b0_hi+slope[3]*xsq
+  
+  polygon(c(xsq, rev(xsq)), c(pd2, rev(pd3)), col = adjustcolor(coluse, alpha.f = 0.5), border = NA)
+  lines(xsq, pd1, col = coluse, lwd = 1.4)
+  
+  r2 = mod$rsquare
+  
+  return(list(slope = slope, r2 = r2))
 }
 
-d_resurvey_ag_RI = agfun(0)
+d_resurvey_ag_RI_same = agfun(0, survey_type = "same")
+d_resurvey_ag_RI_diff = agfun(0, survey_type = "different")
 
-pdf("figures/diversity_estimates.pdf", width = 10, height = 4)
-par(mfcol = c(2,3), mar = c(4,4,2,2))
-plot(d_resurvey_ag_RI$div_1, d_resurvey_ag_RI$div_2, xlab = "richness, first survey", ylab = "richness, repeat surveys", col = collst[1])
-points(d_resurvey_ag_RI$div_1, d_resurvey_ag_RI$div_3, col = collst[2])
-points(d_resurvey_ag_RI$div_1, d_resurvey_ag_RI$div_4, col = collst[3])
-abline(a=0, b = 1, lty = 2)
-slopes = plot_sites_fun(d_resurvey_ag_RI)
-legend("bottomright", c("survey 2", "survey 3", "survey 4"), pch = 1, col = collst)
+set.seed(1234)
+alpha_level = 0.8
+cex_level = 0.8
+
+#pdf("figures/diversity_estimates.pdf", width = 10, height = 4)
+#par(mfcol = c(2,3), mar = c(4,4,2,2))
+plot(jitter(d_resurvey_ag_RI_same$div_1),
+     jitter(d_resurvey_ag_RI_same$div_2),
+     xlab = "richness, first survey", ylab = "richness, repeat surveys",
+     col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
+points(jitter(d_resurvey_ag_RI_same$div_1), jitter(d_resurvey_ag_RI_same$div_3), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
+points(jitter(d_resurvey_ag_RI_same$div_1), jitter(d_resurvey_ag_RI_same$div_4), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
+
+points(jitter(d_resurvey_ag_RI_diff$div_1), jitter(d_resurvey_ag_RI_diff$div_2), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
+points(jitter(d_resurvey_ag_RI_diff$div_1), jitter(d_resurvey_ag_RI_diff$div_3), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
+points(jitter(d_resurvey_ag_RI_diff$div_1), jitter(d_resurvey_ag_RI_diff$div_4), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
+
+abline(a=0, b = 1, lty = 2, lwd = 1.2)
+
+slopes_same = plot_sites_fun(d_resurvey_ag_RI_same, coluse = collst[3])
+slopes_diff = plot_sites_fun(d_resurvey_ag_RI_diff, coluse = collst[4])
+
 hist(c(slopes), breaks = 20, xlab = "site-level slope", main = "")
 abline(v = mean(slopes, na.rm=TRUE), lty = 2)
+
+# add in R2
+
+# graminoid vs. non-graminoid
+
+
+
 
 
 ## shannon
