@@ -1,17 +1,16 @@
-#### TODO:
-# try posterior_epred?
-
 setwd("~/Dropbox/Projects/117_ObservationError/src")
 rm(list = ls())
 require(brms)
-load("output/cover_error.rda")
+#load("output/cover_error.rda")
 
 collst = c("purple", "forestgreen", "dodgerblue3", "firebrick")
 alpha_level = 0.3
-cex_level = 0.5
+cex_level = 0.8
 xsq = seq(0, 1, length = 1e3)
 
 d = read.csv("data/NutNet_ReSurvey_processed_250821.csv")
+#d = d[d$SITE_CODE!="temple.us",]
+d = d[d$trt=="Control",]
 
 # get variance and mean
 covdat = d[,grep("cover_", colnames(d))]
@@ -23,10 +22,14 @@ d$cov_cv = sqrt(d$cov_var)/d$cov_mean
 
 mod_c0 <- brm(bf(cov_cv ~ cov_mean + (1|SITE_CODE),
                  hu ~ cov_mean + (1|SITE_CODE)),
+              save_pars = save_pars(all = TRUE),
               data = d, family = hurdle_lognormal(), cores = 2)
-mod_c0 # R-hats all <= 1.01
+mod_c0 # R-hats all < 1.01
 #plot(mod_c0)
-pred_c = posterior_epred(mod_c0, re_formula = ~ 0, newdata = data.frame(cov_mean = xsq))
+#pred_c = predict(mod_c0, re_formula = ~ 0, newdata = data.frame(cov_mean = xsq))
+tmp = posterior_epred(mod_c0, re_formula = ~ 0, newdata = data.frame(cov_mean = xsq))
+pred_c = t(apply(tmp, 2, function(x) c(mean(x), quantile(x, c(0.025, 0.975)))))
+colnames(pred_c) = c("Estimate", "Q2.5", "Q97.5")
 
 par(mar=c(4,4,2,2))
 plot((d$cov_mean), d$cov_cv,
@@ -43,12 +46,20 @@ matlines(xsq, pred_c[,c("Estimate", "Q2.5", "Q97.5")], lty = c(1,2,2), col = 1)
 # graminoids vs. non-graminoids
 mod_cg <- brm(bf(cov_cv ~ cov_mean*group + (1|SITE_CODE),
                  hu ~ cov_mean*group + (1|SITE_CODE)),
+              save_pars = save_pars(all = TRUE),
               data = d, family = hurdle_lognormal(), cores = 2)
-mod_cg # R-hats all < 1.01
+mod_cg # R-hats all <= 1.01
 #plot(mod_cg)
-pred_cg = predict(mod_cg, re_formula = ~ 0, newdata = data.frame(cov_mean = xsq, group = "Graminoid"))
-pred_cng = predict(mod_cg, re_formula = ~ 0, newdata = data.frame(cov_mean = xsq, group = "Non-Graminoid"))
+#pred_cg = predict(mod_cg, re_formula = ~ 0, newdata = data.frame(cov_mean = xsq, group = "Graminoid"))
+#pred_cng = predict(mod_cg, re_formula = ~ 0, newdata = data.frame(cov_mean = xsq, group = "Non-Graminoid"))
 
+tmp = posterior_epred(mod_cg, re_formula = ~ 0, newdata = data.frame(cov_mean = xsq, group = "Graminoid"))
+pred_cg = t(apply(tmp, 2, function(x) c(mean(x), quantile(x, c(0.025, 0.975)))))
+colnames(pred_cg) = c("Estimate", "Q2.5", "Q97.5")
+
+tmp = posterior_epred(mod_cg, re_formula = ~ 0, newdata = data.frame(cov_mean = xsq, group = "Non-Graminoid"))
+pred_cng = t(apply(tmp, 2, function(x) c(mean(x), quantile(x, c(0.025, 0.975)))))
+colnames(pred_cng) = c("Estimate", "Q2.5", "Q97.5")
 
 par(mar=c(4,4,2,2))
 plot((d$cov_mean), d$cov_cv,
@@ -82,17 +93,32 @@ d$cov_cv_same = sqrt(d$cov_var_same)/d$cov_mean_same
 
 mod_c0s <- brm(bf(cov_cv_same ~ cov_mean_same + (1|SITE_CODE),
                   hu ~ cov_mean_same + (1|SITE_CODE)),
+               save_pars = save_pars(all = TRUE),
                data = d, family = hurdle_lognormal(), cores = 2)
-mod_c0s # R-hats all < 1.01
+mod_c0s # R-hats all <= 1.01
 #plot(mod_c0s)
-pred_cs = predict(mod_c0s, re_formula = ~ 0, newdata = data.frame(cov_mean_same = xsq), probs = c(0.025, pnorm(c(-1,1)), 0.975))
+#pred_cs = predict(mod_c0s, re_formula = ~ 0, newdata = data.frame(cov_mean_same = xsq), probs = c(0.025, pnorm(c(-1,1)), 0.975))
+tmp = posterior_epred(mod_c0s, re_formula = ~ 0, newdata = data.frame(cov_mean_same = xsq))
+pred_cs = t(apply(tmp, 2, function(x) c(mean(x), quantile(x, c(0.025, pnorm(c(-1,1)), 0.975)))))
+colnames(pred_cs) = c("Estimate", "Q2.5", "QmSD", "QpSD", "Q97.5")
+
 
 mod_cgs <- brm(bf(cov_cv_same ~ cov_mean_same*group + (1|SITE_CODE),
-                  hu ~ cov_mean_same*group + (1|SITE_CODE)), data = d, family = hurdle_lognormal(), cores = 2)
+                  hu ~ cov_mean_same*group + (1|SITE_CODE)),
+               save_pars = save_pars(all = TRUE),
+               data = d, family = hurdle_lognormal(), cores = 2)
 mod_cgs # R-hats all < 1.01
 #plot(mod_cgs)
-pred_cgs = predict(mod_cgs, re_formula = ~ 0, newdata = data.frame(cov_mean_same = xsq, group = "Graminoid"), probs = c(0.025, pnorm(c(-1,1)), 0.975))
-pred_cngs = predict(mod_cgs, re_formula = ~ 0, newdata = data.frame(cov_mean_same = xsq, group = "Non-Graminoid"), probs = c(0.025, pnorm(c(-1,1)), 0.975))
+#pred_cgs = predict(mod_cgs, re_formula = ~ 0, newdata = data.frame(cov_mean_same = xsq, group = "Graminoid"), probs = c(0.025, pnorm(c(-1,1)), 0.975))
+#pred_cngs = predict(mod_cgs, re_formula = ~ 0, newdata = data.frame(cov_mean_same = xsq, group = "Non-Graminoid"), probs = c(0.025, pnorm(c(-1,1)), 0.975))
+
+tmp = posterior_epred(mod_cgs, re_formula = ~ 0, newdata = data.frame(cov_mean_same = xsq, group = "Non-Graminoid"))
+pred_cgs = t(apply(tmp, 2, function(x) c(mean(x), quantile(x, c(0.025, pnorm(c(-1,1)), 0.975)))))
+colnames(pred_cgs) = c("Estimate", "Q2.5", "QmSD", "QpSD", "Q97.5")
+
+tmp = posterior_epred(mod_cgs, re_formula = ~ 0, newdata = data.frame(cov_mean_same = xsq, group = "Non-Graminoid"))
+pred_cngs = t(apply(tmp, 2, function(x) c(mean(x), quantile(x, c(0.025, pnorm(c(-1,1)), 0.975)))))
+colnames(pred_cngs) = c("Estimate", "Q2.5", "QmSD", "QpSD", "Q97.5")
 
 
 # different surveyor
@@ -108,32 +134,48 @@ d$cov_mean_diff = apply(covdat_diff, 1, function(x) mean(x, na.rm=TRUE))
 d$cov_cv_diff = sqrt(d$cov_var_diff)/d$cov_mean_same
 
 mod_c0d <- brm(bf(cov_cv_diff ~ cov_mean_diff + (1|SITE_CODE),
-                  hu ~ cov_mean_diff + (1|SITE_CODE)), data = d, family = hurdle_lognormal(), cores = 2)
+                  hu ~ cov_mean_diff + (1|SITE_CODE)),
+               save_pars = save_pars(all = TRUE),
+               data = d, family = hurdle_lognormal(), cores = 2)
 mod_c0d # R-hats all <= 1.01
 #plot(mod_c0d)
-pred_cd = predict(mod_c0d, re_formula = ~ 0, newdata = data.frame(cov_mean_diff = xsq), probs = c(0.025, pnorm(c(-1,1)), 0.975))
+#pred_cd = predict(mod_c0d, re_formula = ~ 0, newdata = data.frame(cov_mean_diff = xsq), probs = c(0.025, pnorm(c(-1,1)), 0.975))
+tmp = posterior_epred(mod_c0d, re_formula = ~ 0, newdata = data.frame(cov_mean_diff = xsq))
+pred_cd = t(apply(tmp, 2, function(x) c(mean(x), quantile(x, c(0.025, pnorm(c(-1,1)), 0.975)))))
+colnames(pred_cd) = c("Estimate", "Q2.5", "QmSD", "QpSD", "Q97.5")
 
 mod_cgd <- brm(bf(cov_cv_diff ~ cov_mean_diff*group + (1|SITE_CODE),
-                  hu ~ cov_mean_diff*group + (1|SITE_CODE)), data = d, family = hurdle_lognormal(), cores = 2)
+                  hu ~ cov_mean_diff*group + (1|SITE_CODE)),
+               save_pars = save_pars(all = TRUE), 
+               data = d, family = hurdle_lognormal(), cores = 2)
 mod_cgd # R-hats all < 1.01
 #plot(mod_cgd)
-pred_cgd = predict(mod_cgd, re_formula = ~ 0, newdata = data.frame(cov_mean_diff = xsq, group = "Graminoid"), probs = c(0.025, pnorm(c(-1,1)), 0.975))
-pred_cngd = predict(mod_cgd, re_formula = ~ 0, newdata = data.frame(cov_mean_diff = xsq, group = "Non-Graminoid"), probs = c(0.025, pnorm(c(-1,1)), 0.975))
+#pred_cgd = predict(mod_cgd, re_formula = ~ 0, newdata = data.frame(cov_mean_diff = xsq, group = "Graminoid"), probs = c(0.025, pnorm(c(-1,1)), 0.975))
+#pred_cngd = predict(mod_cgd, re_formula = ~ 0, newdata = data.frame(cov_mean_diff = xsq, group = "Non-Graminoid"), probs = c(0.025, pnorm(c(-1,1)), 0.975))
+
+tmp = posterior_epred(mod_cgd, re_formula = ~ 0, newdata = data.frame(cov_mean_diff = xsq, group = "Non-Graminoid"))
+pred_cgd = t(apply(tmp, 2, function(x) c(mean(x), quantile(x, c(0.025, pnorm(c(-1,1)), 0.975)))))
+colnames(pred_cgd) = c("Estimate", "Q2.5", "QmSD", "QpSD", "Q97.5")
+
+tmp = posterior_epred(mod_cgd, re_formula = ~ 0, newdata = data.frame(cov_mean_diff = xsq, group = "Non-Graminoid"))
+pred_cngd = t(apply(tmp, 2, function(x) c(mean(x), quantile(x, c(0.025, pnorm(c(-1,1)), 0.975)))))
+colnames(pred_cngd) = c("Estimate", "Q2.5", "QmSD", "QpSD", "Q97.5")
 
 
 # model comparison
-loo_c0s = loo(mod_c0s) # Pareto k estimates < 0.7
-loo_c0d = loo(mod_c0d) # Pareto k estimates < 0.7
+loo_c0s = loo(mod_c0s, moment_match = TRUE) # Pareto k estimates < 0.7
+loo_c0d = loo(mod_c0d, moment_match = TRUE) # Pareto k estimates < 0.7
 
-loo_c0s_cgs = loo(mod_c0s, mod_cgs) # Pareto k estimates < 0.7; cgs best (-5.3, sd 5.6)
-loo_c0d_cgd = loo(mod_c0d, mod_cgd) # Pareto k estimates < 0.7; cgd best (-13.5, sd 9.5)
+loo_c0s_cgs = loo(mod_c0s, mod_cgs, moment_match = TRUE) # Pareto k estimates < 0.7; cgs best (-5.3, sd 5.6)
+loo_c0d_cgd = loo(mod_c0d, mod_cgd, moment_match = TRUE) # Pareto k estimates < 0.7; cgd best (-13.5, sd 9.5)
 
-
+# save models
+#save(list = ls(), file = "output/cover_error.rda")
 
 #####################
 # plot total
-#pdf("figures/cover_error.pdf", width = 8, height = 4)
-png("figures/cover_error.png", width = 8, height = 4, units = "in", res = 200)
+pdf("figures/cover_error.pdf", width = 8, height = 4)
+#png("figures/cover_error.png", width = 8, height = 4, units = "in", res = 200)
 
 X = cbind(c(1,1), c(1,1), c(1,1), c(2,3),  c(2,3))
 layout(X)
@@ -144,21 +186,21 @@ plot((d$cov_mean_same), d$cov_cv_same,
      xlim = c(0,1),
      cex = cex_level, col = adjustcolor(collst[3], alpha_level),
      xlab = "", ylab = "")
-mtext("Mean species-level cover", 1, line = 2.4)
-mtext("CV of species-level cover", 2, line = 2.4)
+mtext("Mean non-zero species-level cover", 1, line = 2.4)
+mtext("CV of non-zero species-level cover", 2, line = 2.4)
 abline(h = 0, v = c(0,1), lty = 3)
 #abline(a = 0, b = sqrt(2), lty = 3)
 abline(h = 2/sqrt(2), lty=3)
 lines(xsq, sqrt(0.01^2/2)/xsq, lty = 2, lwd = 1.5)
 
-polygon(c(xsq, rev(xsq)), c(pred_cs[,c(4)], rev(pred_cs[,c(5)])), col = adjustcolor(collst[3], 0.5), border = NA)
+polygon(c(xsq, rev(xsq)), c(pred_cs[,c(3)], rev(pred_cs[,c(4)])), col = adjustcolor(collst[3], 0.5), border = NA)
 lines(xsq, pred_cs[,1], lty = c(1), col = collst[3], lwd = 1.8)
 #matlines(xsq, pred_cs[,c(1,4,5)], lty = c(1,2,2), col = collst[3])
 
 points((d$cov_mean_diff), d$cov_cv_diff,
        pch = 2,
        cex = cex_level, col = adjustcolor(collst[4], alpha_level))
-polygon(c(xsq, rev(xsq)), c(pred_cd[,c(4)], rev(pred_cd[,c(5)])), col = adjustcolor(collst[4], 0.5), border = NA)
+polygon(c(xsq, rev(xsq)), c(pred_cd[,c(3)], rev(pred_cd[,c(4)])), col = adjustcolor(collst[4], 0.5), border = NA)
 lines(xsq, pred_cd[,1], lty = c(1), col = collst[4], lwd = 1.8)
 #matlines(xsq, pred_cd[,c(1,4,5)], lty = c(1,2,2), col = collst[4])
 
@@ -180,14 +222,14 @@ abline(h = 0, v = c(0,1), lty = 3)
 #abline(a = 0, b = sqrt(2), lty = 3)
 abline(h = 2/sqrt(2), lty=3)
 lines(xsq, sqrt(0.01^2/2)/xsq, lty = 2, lwd = 1.5)
-polygon(c(xsq, rev(xsq)), c(pred_cgs[,c(4)], rev(pred_cgs[,c(5)])), col = adjustcolor(collst[3], 0.5), border = NA)
+polygon(c(xsq, rev(xsq)), c(pred_cgs[,c(3)], rev(pred_cgs[,c(4)])), col = adjustcolor(collst[3], 0.5), border = NA)
 lines(xsq, pred_cgs[,1], lty = c(1), col = collst[3], lwd = 1.8)
 #matlines(xsq, pred_cgs[,c(1,4,5)], lty = c(1,2,2), col = collst[3])
 
 points((d$cov_mean_diff)[ps], d$cov_cv_diff[ps],
        pch = 2,
        cex = cex_level, col = adjustcolor(collst[4], alpha_level))
-polygon(c(xsq, rev(xsq)), c(pred_cgd[,c(4)], rev(pred_cgd[,c(5)])), col = adjustcolor(collst[4], 0.5), border = NA)
+polygon(c(xsq, rev(xsq)), c(pred_cgd[,c(3)], rev(pred_cgd[,c(4)])), col = adjustcolor(collst[4], 0.5), border = NA)
 lines(xsq, pred_cgd[,1], lty = c(1), col = collst[4], lwd = 1.8)
 #matlines(xsq, pred_cgd[,c(1,4,5)], lty = c(1,2,2), col = collst[4])
 
@@ -210,7 +252,7 @@ abline(h = 0, v = c(0,1), lty = 3)
 abline(h = 2/sqrt(2), lty=3)
 lines(xsq, sqrt(0.01^2/2)/xsq, lty = 2, lwd = 1.5)
 
-polygon(c(xsq, rev(xsq)), c(pred_cngs[,c(4)], rev(pred_cngs[,c(5)])), col = adjustcolor(collst[3], 0.5), border = NA)
+polygon(c(xsq, rev(xsq)), c(pred_cngs[,c(3)], rev(pred_cngs[,c(4)])), col = adjustcolor(collst[3], 0.5), border = NA)
 lines(xsq, pred_cngs[,1], lty = c(1), col = collst[3], lwd = 1.8)
 #matlines(xsq, pred_cngs[,c(1,4,5)], lty = c(1,2,2), col = collst[3])
 
@@ -218,7 +260,7 @@ points((d$cov_mean_diff)[ps], d$cov_cv_diff[ps],
        pch = 2,
        cex = cex_level, col = adjustcolor(collst[4], alpha_level))
 
-polygon(c(xsq, rev(xsq)), c(pred_cngd[,c(4)], rev(pred_cngd[,c(5)])), col = adjustcolor(collst[4], 0.5), border = NA)
+polygon(c(xsq, rev(xsq)), c(pred_cngd[,c(3)], rev(pred_cngd[,c(4)])), col = adjustcolor(collst[4], 0.5), border = NA)
 lines(xsq, pred_cngd[,1], lty = c(1), col = collst[4], lwd = 1.8)
 #matlines(xsq, pred_cngd[,c(1,4,5)], lty = c(1,2,2), col = collst[4])
 
@@ -226,9 +268,7 @@ lines(xsq, pred_cngd[,1], lty = c(1), col = collst[4], lwd = 1.8)
 #       lty = 1, pch = c(1,2), col = collst[3:4], bty = "n")
 title("C. Non-Graminoids", adj = 0)
 
-mtext("Mean species-level cover", 1, line = 2.4)
-mtext("CV of species-level cover", 2, line = 2.4, adj = -1)
+mtext("Mean non-zero species-level cover", 1, line = 2.4)
+mtext("CV of non-zero species-level cover", 2, line = 2.4, adj = -0.3)
 dev.off()
 
-# save models
-#save(list = ls(), file = "output/cover_error.rda")
