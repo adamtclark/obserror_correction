@@ -7,8 +7,8 @@ alpha_level = 0.3
 cex_level = 0.8
 xsq = seq(0, 1, length = 1e3)
 
-d = read.csv("data/NutNet_ReSurvey_processed_250821.csv")
-d = d[d$trt=="Control",]
+d_resurvey = read.csv("data/NutNet_ReSurvey_processed_250821.csv")
+d_resurvey = d_resurvey[d_resurvey$trt=="Control",]
 
 ###################
 ### number of species
@@ -36,13 +36,13 @@ hillfun = function(x, q = 0) {
 
 ## richness
 d_resurvey_ag = with(d_resurvey[!d_resurvey$species%in%c("bare ground", "litter", "cryptogam"),], aggregate(list(div_1 = cover_1,
-                                                                                                                 div_2 = cover_2,
-                                                                                                                 div_3 = cover_3,
-                                                                                                                 div_4 = cover_4),
-                                                                                                            by = list(SITE_CODE = SITE_CODE, trt = trt,
-                                                                                                                      first_nutrient_year = first_nutrient_year,
-                                                                                                                      block = block, plot = plot),
-                                                                                                            FUN = function(x) hillfun(x, q = 0)))
+                 div_2 = cover_2,
+                 div_3 = cover_3,
+                 div_4 = cover_4),
+            by = list(SITE_CODE = SITE_CODE, trt = trt,
+                      first_nutrient_year = first_nutrient_year,
+                      block = block, plot = plot),
+            FUN = function(x) hillfun(x, q = 0)))
 agfun = function(q) {
   with(d_resurvey[!d_resurvey$species%in%c("bare ground", "litter", "cryptogam"),], aggregate(list(div_1 = cover_1,
              div_2 = cover_2,
@@ -54,9 +54,48 @@ agfun = function(q) {
         FUN = function(x) hillfun(x, q = q)))
 }
 
-d_resurvey_ag_RI = agfun(0)
+plot_sites_fun = function(agdat, nameslist = c("div_1", "div_2", "div_3"), alphalevel = 0.2) {
+  stlst = sort(unique(agdat$SITE_CODE))
+  require(lmodel2)
+  
+  colnames(agdat)[which(colnames(agdat) %in% nameslist)] = c("div_1", "div_2", "div_3")
+  
+  slope_lst = matrix(nrow = length(stlst), ncol = 3, data = NA)
+  
+  suppressWarnings({
+    for(i in 1:length(stlst)) {
+      ps = which(agdat$SITE_CODE == stlst[i])
+      xsq = seq(min(agdat$div_1[ps], na.rm=TRUE), max(agdat$div_1[ps], na.rm=TRUE), length=100)
+      collst = viridis(3)
+      collst2 = adjustcolor(viridis(3), alpha.f = alphalevel)
+      
+      if(sum(!is.na(agdat$div_2[ps]+agdat$div_1[ps]))>2) {
+        mod1 = suppressMessages(lmodel2(div_2~div_1, agdat[ps,], "relative", "relative"))
+        pd1 = mod1$regression.results[4,2]+mod1$regression.results[4,3]*xsq
+        #predict(mod1, newdata = data.frame(div_1=xsq))
+        lines(xsq, pd1, col = collst2[1])
+        slope_lst[i,1] = mod1$regression.results[4,3]
+      }
+      
+      if(sum(!is.na(agdat$div_3[ps]+agdat$div_1[ps]))>2) {
+        mod2 = suppressMessages(lmodel2(div_3~div_1, agdat[ps,], "relative", "relative"))
+        pd2 = mod2$regression.results[4,2]+mod2$regression.results[4,3]*xsq
+        #predict(mod1, newdata = data.frame(div_1=xsq))
+        lines(xsq, pd2, col = collst2[2])
+        slope_lst[i,2] = mod2$regression.results[4,3]
+      }
+      if(sum(!is.na(agdat$div_4[ps]+agdat$div_1[ps]))>2) {
+        mod3 = suppressMessages(lmodel2(div_4~div_1, agdat[ps,], "relative", "relative"))
+        pd3 = mod3$regression.results[4,2]+mod3$regression.results[4,3]*xsq
+        #predict(mod1, newdata = data.frame(div_1=xsq))
+        lines(xsq, pd3, col = collst2[3])
+        slope_lst[i,3] = mod3$regression.results[4,3]
+      }
+    }})
+  return(slope_lst)
+}
 
-collst = viridis(3)
+d_resurvey_ag_RI = agfun(0)
 
 pdf("figures/diversity_estimates.pdf", width = 10, height = 4)
 par(mfcol = c(2,3), mar = c(4,4,2,2))

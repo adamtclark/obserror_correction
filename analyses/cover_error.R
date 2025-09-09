@@ -112,7 +112,7 @@ mod_cgs # R-hats all < 1.01
 #pred_cgs = predict(mod_cgs, re_formula = ~ 0, newdata = data.frame(cov_mean_same = xsq, group = "Graminoid"), probs = c(0.025, pnorm(c(-1,1)), 0.975))
 #pred_cngs = predict(mod_cgs, re_formula = ~ 0, newdata = data.frame(cov_mean_same = xsq, group = "Non-Graminoid"), probs = c(0.025, pnorm(c(-1,1)), 0.975))
 
-tmp = posterior_epred(mod_cgs, re_formula = ~ 0, newdata = data.frame(cov_mean_same = xsq, group = "Non-Graminoid"))
+tmp = posterior_epred(mod_cgs, re_formula = ~ 0, newdata = data.frame(cov_mean_same = xsq, group = "Graminoid"))
 pred_cgs = t(apply(tmp, 2, function(x) c(mean(x), quantile(x, c(0.025, pnorm(c(-1,1)), 0.975)))))
 colnames(pred_cgs) = c("Estimate", "Q2.5", "QmSD", "QpSD", "Q97.5")
 
@@ -153,7 +153,7 @@ mod_cgd # R-hats all < 1.01
 #pred_cgd = predict(mod_cgd, re_formula = ~ 0, newdata = data.frame(cov_mean_diff = xsq, group = "Graminoid"), probs = c(0.025, pnorm(c(-1,1)), 0.975))
 #pred_cngd = predict(mod_cgd, re_formula = ~ 0, newdata = data.frame(cov_mean_diff = xsq, group = "Non-Graminoid"), probs = c(0.025, pnorm(c(-1,1)), 0.975))
 
-tmp = posterior_epred(mod_cgd, re_formula = ~ 0, newdata = data.frame(cov_mean_diff = xsq, group = "Non-Graminoid"))
+tmp = posterior_epred(mod_cgd, re_formula = ~ 0, newdata = data.frame(cov_mean_diff = xsq, group = "Graminoid"))
 pred_cgd = t(apply(tmp, 2, function(x) c(mean(x), quantile(x, c(0.025, pnorm(c(-1,1)), 0.975)))))
 colnames(pred_cgd) = c("Estimate", "Q2.5", "QmSD", "QpSD", "Q97.5")
 
