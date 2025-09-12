@@ -1,7 +1,5 @@
 setwd("~/Dropbox/Projects/117_ObservationError/src")
 rm(list = ls())
-#require(lmodel2)
-#require(brms)
 #load("output/cover_e2.rda")
 
 collst = c("purple", "forestgreen", "dodgerblue3", "firebrick")
@@ -12,40 +10,7 @@ xsq = seq(0, 1, length = 1e3)
 d_resurvey = read.csv("data/NutNet_ReSurvey_processed_250821.csv")
 d_resurvey = d_resurvey[d_resurvey$trt=="Control",]
 
-###################
-### number of species
-hillfun = function(x, q = 0) {
-  x[x==0] = NA
-  if(is.null(dim(x))) {
-    x = matrix(x)
-  }
-  if(nrow(x)>1) {
-    p = x/rep(colSums(x, na.rm=TRUE), each = nrow(x))
-    if(q == 0) {
-      D = colSums(x>0, na.rm=TRUE)
-    } else if(q == 1) {
-      D = exp(-colSums(p*log(p), na.rm = TRUE))
-    } else {
-      D = colSums(p^q,na.rm=TRUE)^(1/(1-q))
-    }
-    D[!is.finite(D)] = NA
-    D[apply(x, 2, function(y) all(is.na(y)))] = NA
-    return(D)
-  } else {
-    return(NA)
-  }
-}
-
-## richness
-d_resurvey_ag = with(d_resurvey[!d_resurvey$species%in%c("bare ground", "litter", "cryptogam"),], aggregate(list(div_1 = cover_1,
-                 div_2 = cover_2,
-                 div_3 = cover_3,
-                 div_4 = cover_4),
-            by = list(SITE_CODE = SITE_CODE, trt = trt,
-                      first_nutrient_year = first_nutrient_year,
-                      block = block, plot = plot),
-            FUN = function(x) hillfun(x, q = 0)))
-agfun = function(q, ps_agg = NULL, survey_type = "same") {
+agfun = function(ps_agg = NULL, survey_type = "same") {
   if(is.null(ps_agg)) {
     ps_agg = 1:nrow(d_resurvey)
   }
@@ -85,17 +50,25 @@ agfun = function(q, ps_agg = NULL, survey_type = "same") {
     tmp[,grep("cover_", colnames(tmp))] = covdat_diff
   }
   
-  with(tmp, aggregate(list(div_1 = cover_1,
-             div_2 = cover_2,
-             div_3 = cover_3,
-             div_4 = cover_4),
+  agfun_sum = function(x) {
+    if(all(is.na(x))) {
+      NA
+    } else {
+      sum(x, na.rm=TRUE)
+    }
+  }
+  
+  with(tmp, aggregate(list(cover_1 = cover_1,
+                           cover_2 = cover_2,
+                           cover_3 = cover_3,
+                           cover_4 = cover_4),
         by = list(SITE_CODE = SITE_CODE, trt = trt,
                   first_nutrient_year = first_nutrient_year,
                   block = block, plot = plot),
-        FUN = function(x) hillfun(x, q = q)))
+        FUN = agfun_sum))
 }
 
-plot_sites_fun = function(agdat, ps = NULL, nameslist = c("div_1", "div_2", "div_3", "div_4"), niter = 1e3) {
+plot_sites_fun = function(agdat, ps = NULL, nameslist = c("cover_1", "cover_2", "cover_3", "cover_4"), niter = 1e3) {
   #require(lmodel2)
   
   colnames(agdat)[which(colnames(agdat) %in% nameslist)] = nameslist
@@ -103,10 +76,10 @@ plot_sites_fun = function(agdat, ps = NULL, nameslist = c("div_1", "div_2", "div
   if(is.null(ps)) {
     ps = 1:nrow(agdat)
   }
-  xsq = seq(min(agdat$div_1[ps], na.rm=TRUE), max(agdat$div_1[ps], na.rm=TRUE), length=100)
+  xsq = seq(min(agdat$cover_1[ps], na.rm=TRUE), max(agdat$cover_1[ps], na.rm=TRUE), length=100)
   
-  obs_1 = rep(agdat$div_1[ps], 3)
-  obs_2 = c(agdat$div_2[ps], agdat$div_3[ps], agdat$div_4[ps])
+  obs_1 = rep(agdat$cover_1[ps], 3)
+  obs_2 = c(agdat$cover_2[ps], agdat$cover_3[ps], agdat$cover_4[ps])
   moddat = data.frame(obs_2 = obs_2, obs_1 = obs_1)
   
   predmat = matrix(nrow = length(xsq), ncol = niter)
@@ -138,464 +111,162 @@ cex_level = 0.8
 
 # get values for plotting
 # richness, all species
-d_resurvey_ag_RI_same = agfun(0, survey_type = "same")
-d_resurvey_ag_RI_diff = agfun(0, survey_type = "different")
+d_resurvey_ag_COV_same = agfun(survey_type = "same")
+d_resurvey_ag_COV_diff = agfun(survey_type = "different")
 
-mod_same_rich = plot_sites_fun(d_resurvey_ag_RI_same)
-pred_same_rich = t(apply(mod_same_rich$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_same_rich = quantile(mod_same_rich$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_same_rich = quantile(mod_same_rich$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_same_rich = mod_same_rich$xsq
+mod_same_cover = plot_sites_fun(d_resurvey_ag_COV_same)
+pred_same_cover = t(apply(mod_same_cover$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
+slope_same_cover = quantile(mod_same_cover$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
+r2_same_cover = quantile(mod_same_cover$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
+xsq_same_cover = mod_same_cover$xsq
 
-mod_diff_rich = plot_sites_fun(d_resurvey_ag_RI_diff)
-pred_diff_rich = t(apply(mod_diff_rich$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_diff_rich = quantile(mod_diff_rich$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_diff_rich = quantile(mod_diff_rich$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_diff_rich = mod_diff_rich$xsq
+mod_diff_cover = plot_sites_fun(d_resurvey_ag_COV_diff)
+pred_diff_cover = t(apply(mod_diff_cover$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
+slope_diff_cover = quantile(mod_diff_cover$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
+r2_diff_cover = quantile(mod_diff_cover$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
+xsq_diff_cover = mod_diff_cover$xsq
 
 # richness, graminoids
-d_resurvey_ag_RI_same_g = agfun(0, survey_type = "same", ps_agg = which(d_resurvey$group=="Graminoid"))
-d_resurvey_ag_RI_diff_g = agfun(0, survey_type = "different", ps_agg = which(d_resurvey$group=="Graminoid"))
+d_resurvey_ag_COV_same_g = agfun(survey_type = "same", ps_agg = which(d_resurvey$group=="Graminoid"))
+d_resurvey_ag_COV_diff_g = agfun(survey_type = "different", ps_agg = which(d_resurvey$group=="Graminoid"))
 
-mod_same_rich_g = plot_sites_fun(d_resurvey_ag_RI_same_g)
-pred_same_rich_g = t(apply(mod_same_rich_g$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_same_rich_g = quantile(mod_same_rich_g$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_same_rich_g = quantile(mod_same_rich_g$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_same_rich_g = mod_same_rich_g$xsq
+mod_same_cover_g = plot_sites_fun(d_resurvey_ag_COV_same_g)
+pred_same_cover_g = t(apply(mod_same_cover_g$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
+slope_same_cover_g = quantile(mod_same_cover_g$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
+r2_same_cover_g = quantile(mod_same_cover_g$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
+xsq_same_cover_g = mod_same_cover_g$xsq
 
-mod_diff_rich_g = plot_sites_fun(d_resurvey_ag_RI_diff_g)
-pred_diff_rich_g = t(apply(mod_diff_rich_g$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_diff_rich_g = quantile(mod_diff_rich_g$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_diff_rich_g = quantile(mod_diff_rich_g$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_diff_rich_g = mod_diff_rich_g$xsq
+mod_diff_cover_g = plot_sites_fun(d_resurvey_ag_COV_diff_g)
+pred_diff_cover_g = t(apply(mod_diff_cover_g$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
+slope_diff_cover_g = quantile(mod_diff_cover_g$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
+r2_diff_cover_g = quantile(mod_diff_cover_g$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
+xsq_diff_cover_g = mod_diff_cover_g$xsq
 
 # richness, non-graminoids
-d_resurvey_ag_RI_same_ng = agfun(0, survey_type = "same", ps_agg = which(d_resurvey$group=="Non-Graminoid"))
-d_resurvey_ag_RI_diff_ng = agfun(0, survey_type = "different", ps_agg = which(d_resurvey$group=="Non-Graminoid"))
+d_resurvey_ag_COV_same_ng = agfun(survey_type = "same", ps_agg = which(d_resurvey$group=="Non-Graminoid"))
+d_resurvey_ag_COV_diff_ng = agfun(survey_type = "different", ps_agg = which(d_resurvey$group=="Non-Graminoid"))
 
-mod_same_rich_ng = plot_sites_fun(d_resurvey_ag_RI_same_ng)
-pred_same_rich_ng = t(apply(mod_same_rich_ng$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_same_rich_ng = quantile(mod_same_rich_ng$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_same_rich_ng = quantile(mod_same_rich_ng$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_same_rich_ng = mod_same_rich_ng$xsq
+mod_same_cover_ng = plot_sites_fun(d_resurvey_ag_COV_same_ng)
+pred_same_cover_ng = t(apply(mod_same_cover_ng$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
+slope_same_cover_ng = quantile(mod_same_cover_ng$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
+r2_same_cover_ng = quantile(mod_same_cover_ng$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
+xsq_same_cover_ng = mod_same_cover_ng$xsq
 
-mod_diff_rich_ng = plot_sites_fun(d_resurvey_ag_RI_diff_ng)
-pred_diff_rich_ng = t(apply(mod_diff_rich_ng$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_diff_rich_ng = quantile(mod_diff_rich_ng$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_diff_rich_ng = quantile(mod_diff_rich_ng$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_diff_rich_ng = mod_diff_rich_ng$xsq
-
-# shannon, all species
-d_resurvey_ag_SH_same = agfun(1, survey_type = "same")
-d_resurvey_ag_SH_diff = agfun(1, survey_type = "different")
-
-mod_same_shannon = plot_sites_fun(d_resurvey_ag_SH_same)
-pred_same_shannon = t(apply(mod_same_shannon$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_same_shannon = quantile(mod_same_shannon$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_same_shannon = quantile(mod_same_shannon$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_same_shannon = mod_same_shannon$xsq
-
-mod_diff_shannon = plot_sites_fun(d_resurvey_ag_SH_diff)
-pred_diff_shannon = t(apply(mod_diff_shannon$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_diff_shannon = quantile(mod_diff_shannon$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_diff_shannon = quantile(mod_diff_shannon$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_diff_shannon = mod_diff_shannon$xsq
-
-# shannon, graminoids
-d_resurvey_ag_SH_same_g = agfun(1, survey_type = "same", ps_agg = which(d_resurvey$group=="Graminoid"))
-d_resurvey_ag_SH_diff_g = agfun(1, survey_type = "different", ps_agg = which(d_resurvey$group=="Graminoid"))
-
-mod_same_shannon_g = plot_sites_fun(d_resurvey_ag_SH_same_g)
-pred_same_shannon_g = t(apply(mod_same_shannon_g$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_same_shannon_g = quantile(mod_same_shannon_g$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_same_shannon_g = quantile(mod_same_shannon_g$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_same_shannon_g = mod_same_shannon_g$xsq
-
-mod_diff_shannon_g = plot_sites_fun(d_resurvey_ag_SH_diff_g)
-pred_diff_shannon_g = t(apply(mod_diff_shannon_g$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_diff_shannon_g = quantile(mod_diff_shannon_g$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_diff_shannon_g = quantile(mod_diff_shannon_g$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_diff_shannon_g = mod_diff_shannon_g$xsq
-
-# shannon, non-graminoids
-d_resurvey_ag_SH_same_ng = agfun(1, survey_type = "same", ps_agg = which(d_resurvey$group=="Non-Graminoid"))
-d_resurvey_ag_SH_diff_ng = agfun(1, survey_type = "different", ps_agg = which(d_resurvey$group=="Non-Graminoid"))
-
-mod_same_shannon_ng = plot_sites_fun(d_resurvey_ag_SH_same_ng)
-pred_same_shannon_ng = t(apply(mod_same_shannon_ng$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_same_shannon_ng = quantile(mod_same_shannon_ng$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_same_shannon_ng = quantile(mod_same_shannon_ng$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_same_shannon_ng = mod_same_shannon_ng$xsq
-
-mod_diff_shannon_ng = plot_sites_fun(d_resurvey_ag_SH_diff_ng)
-pred_diff_shannon_ng = t(apply(mod_diff_shannon_ng$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_diff_shannon_ng = quantile(mod_diff_shannon_ng$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_diff_shannon_ng = quantile(mod_diff_shannon_ng$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_diff_shannon_ng = mod_diff_shannon_ng$xsq
-
-# simpson, all species
-d_resurvey_ag_SI_same = agfun(2, survey_type = "same")
-d_resurvey_ag_SI_diff = agfun(2, survey_type = "different")
-
-mod_same_simpson = plot_sites_fun(d_resurvey_ag_SI_same)
-pred_same_simpson = t(apply(mod_same_simpson$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_same_simpson = quantile(mod_same_simpson$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_same_simpson = quantile(mod_same_simpson$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_same_simpson = mod_same_simpson$xsq
-
-mod_diff_simpson = plot_sites_fun(d_resurvey_ag_SI_diff)
-pred_diff_simpson = t(apply(mod_diff_simpson$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_diff_simpson = quantile(mod_diff_simpson$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_diff_simpson = quantile(mod_diff_simpson$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_diff_simpson = mod_diff_simpson$xsq
-
-# simpson, graminoids
-d_resurvey_ag_SI_same_g = agfun(2, survey_type = "same", ps_agg = which(d_resurvey$group=="Graminoid"))
-d_resurvey_ag_SI_diff_g = agfun(2, survey_type = "different", ps_agg = which(d_resurvey$group=="Graminoid"))
-
-mod_same_simpson_g = plot_sites_fun(d_resurvey_ag_SI_same_g)
-pred_same_simpson_g = t(apply(mod_same_simpson_g$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_same_simpson_g = quantile(mod_same_simpson_g$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_same_simpson_g = quantile(mod_same_simpson_g$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_same_simpson_g = mod_same_simpson_g$xsq
-
-mod_diff_simpson_g = plot_sites_fun(d_resurvey_ag_SI_diff_g)
-pred_diff_simpson_g = t(apply(mod_diff_simpson_g$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_diff_simpson_g = quantile(mod_diff_simpson_g$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_diff_simpson_g = quantile(mod_diff_simpson_g$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_diff_simpson_g = mod_diff_simpson_g$xsq
-
-# simpson, non-graminoids
-d_resurvey_ag_SI_same_ng = agfun(2, survey_type = "same", ps_agg = which(d_resurvey$group=="Non-Graminoid"))
-d_resurvey_ag_SI_diff_ng = agfun(2, survey_type = "different", ps_agg = which(d_resurvey$group=="Non-Graminoid"))
-
-mod_same_simpson_ng = plot_sites_fun(d_resurvey_ag_SI_same_ng)
-pred_same_simpson_ng = t(apply(mod_same_simpson_ng$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_same_simpson_ng = quantile(mod_same_simpson_ng$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_same_simpson_ng = quantile(mod_same_simpson_ng$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_same_simpson_ng = mod_same_simpson_ng$xsq
-
-mod_diff_simpson_ng = plot_sites_fun(d_resurvey_ag_SI_diff_ng)
-pred_diff_simpson_ng = t(apply(mod_diff_simpson_ng$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
-slope_diff_simpson_ng = quantile(mod_diff_simpson_ng$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-r2_diff_simpson_ng = quantile(mod_diff_simpson_ng$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
-xsq_diff_simpson_ng = mod_diff_simpson_ng$xsq
-
+mod_diff_cover_ng = plot_sites_fun(d_resurvey_ag_COV_diff_ng)
+pred_diff_cover_ng = t(apply(mod_diff_cover_ng$predmat, 1, function(x) quantile(x, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)))
+slope_diff_cover_ng = quantile(mod_diff_cover_ng$slopemat, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
+r2_diff_cover_ng = quantile(mod_diff_cover_ng$r2lst, c(0.025, pnorm(-1:1), 0.975), na.rm=TRUE)
+xsq_diff_cover_ng = mod_diff_cover_ng$xsq
 
 
 
 
 ## make plot
-pdf("figures/cover_e2.pdf", width = 12, height = 12)
-#png("figures/cover_e2.png", width = 12, height = 12, units = "in", res = 200)
+pdf("figures/cover_e2.pdf", width = 12, height = 4)
+#png("figures/cover_e2.png", width = 12, height = 4, units = "in", res = 200)
 
-par(mfrow = c(3,3), mar = c(3,2,3,2), oma = c(2,2,0,0))
+par(mfrow = c(1,3), mar = c(3,2,3,2), oma = c(2,2,0,0))
 # richness, all species
-pltlim = c(1, max(unlist(d_resurvey_ag_RI_same[,grep(pattern = "div_", x = colnames(d_resurvey_ag_RI_same), fixed = "TRUE")],
-                    d_resurvey_ag_RI_diff[,grep(pattern = "div_", x = colnames(d_resurvey_ag_RI_diff), fixed = "TRUE")]), na.rm=TRUE))
-plot(jitter(d_resurvey_ag_RI_same$div_1),
-     jitter(d_resurvey_ag_RI_same$div_2),
+pltlim = c(0, max(unlist(d_resurvey_ag_COV_same[,grep(pattern = "cover_", x = colnames(d_resurvey_ag_COV_same), fixed = "TRUE")],
+                    d_resurvey_ag_COV_diff[,grep(pattern = "cover_", x = colnames(d_resurvey_ag_COV_diff), fixed = "TRUE")]), na.rm=TRUE))
+plot(jitter(d_resurvey_ag_COV_same$cover_1),
+     jitter(d_resurvey_ag_COV_same$cover_2),
      xlim = pltlim, ylim = pltlim,
      xlab = "", ylab = "",
      col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-mtext("Richness, repeat surveys", 2, outer = FALSE, line = 2.5)
+mtext("Total cover, repeat surveys", 2, outer = FALSE, line = 2.5)
 
-points(jitter(d_resurvey_ag_RI_same$div_1), jitter(d_resurvey_ag_RI_same$div_3), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-points(jitter(d_resurvey_ag_RI_same$div_1), jitter(d_resurvey_ag_RI_same$div_4), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
+points(jitter(d_resurvey_ag_COV_same$cover_1), jitter(d_resurvey_ag_COV_same$cover_3), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
+points(jitter(d_resurvey_ag_COV_same$cover_1), jitter(d_resurvey_ag_COV_same$cover_4), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
 
-points(jitter(d_resurvey_ag_RI_diff$div_1), jitter(d_resurvey_ag_RI_diff$div_2), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_RI_diff$div_1), jitter(d_resurvey_ag_RI_diff$div_3), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_RI_diff$div_1), jitter(d_resurvey_ag_RI_diff$div_4), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
+points(jitter(d_resurvey_ag_COV_diff$cover_1), jitter(d_resurvey_ag_COV_diff$cover_2), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
+points(jitter(d_resurvey_ag_COV_diff$cover_1), jitter(d_resurvey_ag_COV_diff$cover_3), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
+points(jitter(d_resurvey_ag_COV_diff$cover_1), jitter(d_resurvey_ag_COV_diff$cover_4), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
 
 abline(a=0, b = 1, lty = 2, lwd = 1.2)
 
-polygon(c(xsq_same_rich, rev(xsq_same_rich)), c(pred_same_rich[,2], rev(pred_same_rich[,4])),
+polygon(c(xsq_same_cover, rev(xsq_same_cover)), c(pred_same_cover[,2], rev(pred_same_cover[,4])),
         col = adjustcolor(collst[3], alpha.f = 0.5), border = NA)
-lines(xsq_same_rich, pred_same_rich[,3], col = collst[3], lwd = 1.4)
+lines(xsq_same_cover, pred_same_cover[,3], col = collst[3], lwd = 1.4)
 
-polygon(c(xsq_diff_rich, rev(xsq_diff_rich)), c(pred_diff_rich[,2], rev(pred_diff_rich[,4])),
+polygon(c(xsq_diff_cover, rev(xsq_diff_cover)), c(pred_diff_cover[,2], rev(pred_diff_cover[,4])),
         col = adjustcolor(collst[4], alpha.f = 0.5), border = NA)
-lines(xsq_diff_rich, pred_diff_rich[,3], col = collst[4], lwd = 1.4)
+lines(xsq_diff_cover, pred_diff_cover[,3], col = collst[4], lwd = 1.4)
 
-tmp_same = unname(round(quantile(slope_same_rich, c(0.025, 0.975)),2))
-tmp_diff = unname(round(quantile(slope_diff_rich, c(0.025, 0.975)),2))
+tmp_same = unname(round(quantile(slope_same_cover, c(0.025, 0.975)),2))
+tmp_diff = unname(round(quantile(slope_diff_cover, c(0.025, 0.975)),2))
 legend("bottomright",
-       c(paste("Same Surveyor: R-sq = ", round(r2_same_rich[3],2), ", Slope [",tmp_same[1], ",", tmp_same[2] ,"]", sep = ""),
-         paste("Different Surveyors: R-sq = ", round(r2_diff_rich[3],2), ", Slope [",tmp_diff[1], ",", tmp_diff[2], "]", sep = "")),
+       c(paste("Same Surveyor: R-sq = ", round(r2_same_cover[3],2), ", Slope [",tmp_same[1], ",", tmp_same[2] ,"]", sep = ""),
+         paste("Different Surveyors: R-sq = ", round(r2_diff_cover[3],2), ", Slope [",tmp_diff[1], ",", tmp_diff[2], "]", sep = "")),
        col = collst[3:4], lty = 1, pch = 1:2, cex = 1, bty = "n")
 title("A. All Species", adj = 0, line = 0.75)
 
 # richness, graminoids
-pltlim = c(1, max(unlist(d_resurvey_ag_RI_same_g[,grep(pattern = "div_", x = colnames(d_resurvey_ag_RI_same_g), fixed = "TRUE")],
-                         d_resurvey_ag_RI_diff_g[,grep(pattern = "div_", x = colnames(d_resurvey_ag_RI_diff_g), fixed = "TRUE")]), na.rm=TRUE))
-plot(jitter(d_resurvey_ag_RI_same_g$div_1),
-     jitter(d_resurvey_ag_RI_same_g$div_2),
+pltlim = c(0, max(unlist(d_resurvey_ag_COV_same_g[,grep(pattern = "cover_", x = colnames(d_resurvey_ag_COV_same_g), fixed = "TRUE")],
+                         d_resurvey_ag_COV_diff_g[,grep(pattern = "cover_", x = colnames(d_resurvey_ag_COV_diff_g), fixed = "TRUE")]), na.rm=TRUE))
+plot(jitter(d_resurvey_ag_COV_same_g$cover_1),
+     jitter(d_resurvey_ag_COV_same_g$cover_2),
      xlim = pltlim, ylim = pltlim,
      xlab = "", ylab = "",
      col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-mtext("Richness, first survey", 1, line = 2.5)
-points(jitter(d_resurvey_ag_RI_same_g$div_1), jitter(d_resurvey_ag_RI_same_g$div_3), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-points(jitter(d_resurvey_ag_RI_same_g$div_1), jitter(d_resurvey_ag_RI_same_g$div_4), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
+mtext("Total cover, first survey", 1, line = 2.5)
+points(jitter(d_resurvey_ag_COV_same_g$cover_1), jitter(d_resurvey_ag_COV_same_g$cover_3), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
+points(jitter(d_resurvey_ag_COV_same_g$cover_1), jitter(d_resurvey_ag_COV_same_g$cover_4), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
 
-points(jitter(d_resurvey_ag_RI_diff_g$div_1), jitter(d_resurvey_ag_RI_diff_g$div_2), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_RI_diff_g$div_1), jitter(d_resurvey_ag_RI_diff_g$div_3), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_RI_diff_g$div_1), jitter(d_resurvey_ag_RI_diff_g$div_4), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
+points(jitter(d_resurvey_ag_COV_diff_g$cover_1), jitter(d_resurvey_ag_COV_diff_g$cover_2), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
+points(jitter(d_resurvey_ag_COV_diff_g$cover_1), jitter(d_resurvey_ag_COV_diff_g$cover_3), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
+points(jitter(d_resurvey_ag_COV_diff_g$cover_1), jitter(d_resurvey_ag_COV_diff_g$cover_4), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
 
 abline(a=0, b = 1, lty = 2, lwd = 1.2)
 
-polygon(c(xsq_same_rich_g, rev(xsq_same_rich_g)), c(pred_same_rich_g[,2], rev(pred_same_rich_g[,4])),
+polygon(c(xsq_same_cover_g, rev(xsq_same_cover_g)), c(pred_same_cover_g[,2], rev(pred_same_cover_g[,4])),
         col = adjustcolor(collst[3], alpha.f = 0.5), border = NA)
-lines(xsq_same_rich_g, pred_same_rich_g[,3], col = collst[3], lwd = 1.4)
+lines(xsq_same_cover_g, pred_same_cover_g[,3], col = collst[3], lwd = 1.4)
 
-polygon(c(xsq_diff_rich_g, rev(xsq_diff_rich_g)), c(pred_diff_rich_g[,2], rev(pred_diff_rich_g[,4])),
+polygon(c(xsq_diff_cover_g, rev(xsq_diff_cover_g)), c(pred_diff_cover_g[,2], rev(pred_diff_cover_g[,4])),
         col = adjustcolor(collst[4], alpha.f = 0.5), border = NA)
-lines(xsq_diff_rich_g, pred_diff_rich_g[,3], col = collst[4], lwd = 1.4)
+lines(xsq_diff_cover_g, pred_diff_cover_g[,3], col = collst[4], lwd = 1.4)
 
-tmp_same = unname(round(quantile(slope_same_rich_g, c(0.025, 0.975)),2))
-tmp_diff = unname(round(quantile(slope_diff_rich_g, c(0.025, 0.975)),2))
+tmp_same = unname(round(quantile(slope_same_cover_g, c(0.025, 0.975)),2))
+tmp_diff = unname(round(quantile(slope_diff_cover_g, c(0.025, 0.975)),2))
 legend("bottomright",
-       c(paste("Same Surveyor: R-sq = ", round(r2_same_rich_g[3],2), ", Slope [",tmp_same[1], ",", tmp_same[2] ,"]", sep = ""),
-         paste("Different Surveyors: R-sq = ", round(r2_diff_rich_g[3],2), ", Slope [",tmp_diff[1], ",", tmp_diff[2], "]", sep = "")),
+       c(paste("Same Surveyor: R-sq = ", round(r2_same_cover_g[3],2), ", Slope [",tmp_same[1], ",", tmp_same[2] ,"]", sep = ""),
+         paste("Different Surveyors: R-sq = ", round(r2_diff_cover_g[3],2), ", Slope [",tmp_diff[1], ",", tmp_diff[2], "]", sep = "")),
        col = collst[3:4], lty = 1, pch = 1:2, cex = 1, bty = "n")
 title("B. Graminoids", adj = 0, line = 0.75)
 
 # richness, non-graminoids
-pltlim = c(1, max(unlist(d_resurvey_ag_RI_same_ng[,grep(pattern = "div_", x = colnames(d_resurvey_ag_RI_same_ng), fixed = "TRUE")],
-                         d_resurvey_ag_RI_diff_ng[,grep(pattern = "div_", x = colnames(d_resurvey_ag_RI_diff_ng), fixed = "TRUE")]), na.rm=TRUE))
-plot(jitter(d_resurvey_ag_RI_same_ng$div_1),
-     jitter(d_resurvey_ag_RI_same_ng$div_2),
+pltlim = c(0, max(unlist(d_resurvey_ag_COV_same_ng[,grep(pattern = "cover_", x = colnames(d_resurvey_ag_COV_same_ng), fixed = "TRUE")],
+                         d_resurvey_ag_COV_diff_ng[,grep(pattern = "cover_", x = colnames(d_resurvey_ag_COV_diff_ng), fixed = "TRUE")]), na.rm=TRUE))
+plot(jitter(d_resurvey_ag_COV_same_ng$cover_1),
+     jitter(d_resurvey_ag_COV_same_ng$cover_2),
      xlim = pltlim, ylim = pltlim,
      xlab = "", ylab = "",
      col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-points(jitter(d_resurvey_ag_RI_same_ng$div_1), jitter(d_resurvey_ag_RI_same_ng$div_3), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-points(jitter(d_resurvey_ag_RI_same_ng$div_1), jitter(d_resurvey_ag_RI_same_ng$div_4), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
+points(jitter(d_resurvey_ag_COV_same_ng$cover_1), jitter(d_resurvey_ag_COV_same_ng$cover_3), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
+points(jitter(d_resurvey_ag_COV_same_ng$cover_1), jitter(d_resurvey_ag_COV_same_ng$cover_4), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
 
-points(jitter(d_resurvey_ag_RI_diff_ng$div_1), jitter(d_resurvey_ag_RI_diff_ng$div_2), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_RI_diff_ng$div_1), jitter(d_resurvey_ag_RI_diff_ng$div_3), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_RI_diff_ng$div_1), jitter(d_resurvey_ag_RI_diff_ng$div_4), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
+points(jitter(d_resurvey_ag_COV_diff_ng$cover_1), jitter(d_resurvey_ag_COV_diff_ng$cover_2), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
+points(jitter(d_resurvey_ag_COV_diff_ng$cover_1), jitter(d_resurvey_ag_COV_diff_ng$cover_3), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
+points(jitter(d_resurvey_ag_COV_diff_ng$cover_1), jitter(d_resurvey_ag_COV_diff_ng$cover_4), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
 
 abline(a=0, b = 1, lty = 2, lwd = 1.2)
 
-polygon(c(xsq_same_rich_ng, rev(xsq_same_rich_ng)), c(pred_same_rich_ng[,2], rev(pred_same_rich_ng[,4])),
+polygon(c(xsq_same_cover_ng, rev(xsq_same_cover_ng)), c(pred_same_cover_ng[,2], rev(pred_same_cover_ng[,4])),
         col = adjustcolor(collst[3], alpha.f = 0.5), border = NA)
-lines(xsq_same_rich_ng, pred_same_rich_ng[,3], col = collst[3], lwd = 1.4)
+lines(xsq_same_cover_ng, pred_same_cover_ng[,3], col = collst[3], lwd = 1.4)
 
-polygon(c(xsq_diff_rich_ng, rev(xsq_diff_rich_ng)), c(pred_diff_rich_ng[,2], rev(pred_diff_rich_ng[,4])),
+polygon(c(xsq_diff_cover_ng, rev(xsq_diff_cover_ng)), c(pred_diff_cover_ng[,2], rev(pred_diff_cover_ng[,4])),
         col = adjustcolor(collst[4], alpha.f = 0.5), border = NA)
-lines(xsq_diff_rich_ng, pred_diff_rich_ng[,3], col = collst[4], lwd = 1.4)
+lines(xsq_diff_cover_ng, pred_diff_cover_ng[,3], col = collst[4], lwd = 1.4)
 
-tmp_same = unname(round(quantile(slope_same_rich_ng, c(0.025, 0.975)),2))
-tmp_diff = unname(round(quantile(slope_diff_rich_ng, c(0.025, 0.975)),2))
+tmp_same = unname(round(quantile(slope_same_cover_ng, c(0.025, 0.975)),2))
+tmp_diff = unname(round(quantile(slope_diff_cover_ng, c(0.025, 0.975)),2))
 legend("bottomright",
-       c(paste("Same Surveyor: R-sq = ", round(r2_same_rich_ng[3],2), ", Slope [",tmp_same[1], ",", tmp_same[2] ,"]", sep = ""),
-         paste("Different Surveyors: R-sq = ", round(r2_diff_rich_ng[3],2), ", Slope [",tmp_diff[1], ",", tmp_diff[2], "]", sep = "")),
+       c(paste("Same Surveyor: R-sq = ", round(r2_same_cover_ng[3],2), ", Slope [",tmp_same[1], ",", tmp_same[2] ,"]", sep = ""),
+         paste("Different Surveyors: R-sq = ", round(r2_diff_cover_ng[3],2), ", Slope [",tmp_diff[1], ",", tmp_diff[2], "]", sep = "")),
        col = collst[3:4], lty = 1, pch = 1:2, cex = 1, bty = "n")
 title("C. Non-Graminoids", adj = 0, line = 0.75)
-
-# shannon, all species
-pltlim = c(1, max(unlist(d_resurvey_ag_SH_same[,grep(pattern = "div_", x = colnames(d_resurvey_ag_SH_same), fixed = "TRUE")],
-                         d_resurvey_ag_SH_diff[,grep(pattern = "div_", x = colnames(d_resurvey_ag_SH_diff), fixed = "TRUE")]), na.rm=TRUE))
-plot(jitter(d_resurvey_ag_SH_same$div_1),
-     jitter(d_resurvey_ag_SH_same$div_2),
-     xlim = pltlim, ylim = pltlim,
-     xlab = "", ylab = "",
-     col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-mtext("Shannon, repeat surveys", 2, outer = FALSE, line = 2.5)
-
-points(jitter(d_resurvey_ag_SH_same$div_1), jitter(d_resurvey_ag_SH_same$div_3), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-points(jitter(d_resurvey_ag_SH_same$div_1), jitter(d_resurvey_ag_SH_same$div_4), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-
-points(jitter(d_resurvey_ag_SH_diff$div_1), jitter(d_resurvey_ag_SH_diff$div_2), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_SH_diff$div_1), jitter(d_resurvey_ag_SH_diff$div_3), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_SH_diff$div_1), jitter(d_resurvey_ag_SH_diff$div_4), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-
-abline(a=0, b = 1, lty = 2, lwd = 1.2)
-
-polygon(c(xsq_same_shannon, rev(xsq_same_shannon)), c(pred_same_shannon[,2], rev(pred_same_shannon[,4])),
-        col = adjustcolor(collst[3], alpha.f = 0.5), border = NA)
-lines(xsq_same_shannon, pred_same_shannon[,3], col = collst[3], lwd = 1.4)
-
-polygon(c(xsq_diff_shannon, rev(xsq_diff_shannon)), c(pred_diff_shannon[,2], rev(pred_diff_shannon[,4])),
-        col = adjustcolor(collst[4], alpha.f = 0.5), border = NA)
-lines(xsq_diff_shannon, pred_diff_shannon[,3], col = collst[4], lwd = 1.4)
-
-tmp_same = unname(round(quantile(slope_same_shannon, c(0.025, 0.975)),2))
-tmp_diff = unname(round(quantile(slope_diff_shannon, c(0.025, 0.975)),2))
-legend("bottomright",
-       c(paste("Same Surveyor: R-sq = ", round(r2_same_shannon[3],2), ", Slope [",tmp_same[1], ",", tmp_same[2] ,"]", sep = ""),
-         paste("Different Surveyors: R-sq = ", round(r2_diff_shannon[3],2), ", Slope [",tmp_diff[1], ",", tmp_diff[2], "]", sep = "")),
-       col = collst[3:4], lty = 1, pch = 1:2, cex = 1, bty = "n")
-title("D. All Species", adj = 0, line = 0.75)
-
-# shannon, graminoids
-pltlim = c(1, max(unlist(d_resurvey_ag_SH_same_g[,grep(pattern = "div_", x = colnames(d_resurvey_ag_SH_same_g), fixed = "TRUE")],
-                         d_resurvey_ag_SH_diff_g[,grep(pattern = "div_", x = colnames(d_resurvey_ag_SH_diff_g), fixed = "TRUE")]), na.rm=TRUE))
-plot(jitter(d_resurvey_ag_SH_same_g$div_1),
-     jitter(d_resurvey_ag_SH_same_g$div_2),
-     xlim = pltlim, ylim = pltlim,
-     xlab = "", ylab = "",
-     col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-mtext("Shannon, first survey", 1, line = 2.5)
-points(jitter(d_resurvey_ag_SH_same_g$div_1), jitter(d_resurvey_ag_SH_same_g$div_3), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-points(jitter(d_resurvey_ag_SH_same_g$div_1), jitter(d_resurvey_ag_SH_same_g$div_4), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-
-points(jitter(d_resurvey_ag_SH_diff_g$div_1), jitter(d_resurvey_ag_SH_diff_g$div_2), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_SH_diff_g$div_1), jitter(d_resurvey_ag_SH_diff_g$div_3), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_SH_diff_g$div_1), jitter(d_resurvey_ag_SH_diff_g$div_4), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-
-abline(a=0, b = 1, lty = 2, lwd = 1.2)
-
-polygon(c(xsq_same_shannon_g, rev(xsq_same_shannon_g)), c(pred_same_shannon_g[,2], rev(pred_same_shannon_g[,4])),
-        col = adjustcolor(collst[3], alpha.f = 0.5), border = NA)
-lines(xsq_same_shannon_g, pred_same_shannon_g[,3], col = collst[3], lwd = 1.4)
-
-polygon(c(xsq_diff_shannon_g, rev(xsq_diff_shannon_g)), c(pred_diff_shannon_g[,2], rev(pred_diff_shannon_g[,4])),
-        col = adjustcolor(collst[4], alpha.f = 0.5), border = NA)
-lines(xsq_diff_shannon_g, pred_diff_shannon_g[,3], col = collst[4], lwd = 1.4)
-
-tmp_same = unname(round(quantile(slope_same_shannon_g, c(0.025, 0.975)),2))
-tmp_diff = unname(round(quantile(slope_diff_shannon_g, c(0.025, 0.975)),2))
-legend("bottomright",
-       c(paste("Same Surveyor: R-sq = ", round(r2_same_shannon_g[3],2), ", Slope [",tmp_same[1], ",", tmp_same[2] ,"]", sep = ""),
-         paste("Different Surveyors: R-sq = ", round(r2_diff_shannon_g[3],2), ", Slope [",tmp_diff[1], ",", tmp_diff[2], "]", sep = "")),
-       col = collst[3:4], lty = 1, pch = 1:2, cex = 1, bty = "n")
-title("E. Graminoids", adj = 0, line = 0.75)
-
-# shannon, non-graminoids
-pltlim = c(1, max(unlist(d_resurvey_ag_SH_same_ng[,grep(pattern = "div_", x = colnames(d_resurvey_ag_SH_same_ng), fixed = "TRUE")],
-                         d_resurvey_ag_SH_diff_ng[,grep(pattern = "div_", x = colnames(d_resurvey_ag_SH_diff_ng), fixed = "TRUE")]), na.rm=TRUE))
-plot(jitter(d_resurvey_ag_SH_same_ng$div_1),
-     jitter(d_resurvey_ag_SH_same_ng$div_2),
-     xlim = pltlim, ylim = pltlim,
-     xlab = "", ylab = "",
-     col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-points(jitter(d_resurvey_ag_SH_same_ng$div_1), jitter(d_resurvey_ag_SH_same_ng$div_3), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-points(jitter(d_resurvey_ag_SH_same_ng$div_1), jitter(d_resurvey_ag_SH_same_ng$div_4), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-
-points(jitter(d_resurvey_ag_SH_diff_ng$div_1), jitter(d_resurvey_ag_SH_diff_ng$div_2), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_SH_diff_ng$div_1), jitter(d_resurvey_ag_SH_diff_ng$div_3), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_SH_diff_ng$div_1), jitter(d_resurvey_ag_SH_diff_ng$div_4), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-
-abline(a=0, b = 1, lty = 2, lwd = 1.2)
-
-polygon(c(xsq_same_shannon_ng, rev(xsq_same_shannon_ng)), c(pred_same_shannon_ng[,2], rev(pred_same_shannon_ng[,4])),
-        col = adjustcolor(collst[3], alpha.f = 0.5), border = NA)
-lines(xsq_same_shannon_ng, pred_same_shannon_ng[,3], col = collst[3], lwd = 1.4)
-
-polygon(c(xsq_diff_shannon_ng, rev(xsq_diff_shannon_ng)), c(pred_diff_shannon_ng[,2], rev(pred_diff_shannon_ng[,4])),
-        col = adjustcolor(collst[4], alpha.f = 0.5), border = NA)
-lines(xsq_diff_shannon_ng, pred_diff_shannon_ng[,3], col = collst[4], lwd = 1.4)
-
-tmp_same = unname(round(quantile(slope_same_shannon_ng, c(0.025, 0.975)),2))
-tmp_diff = unname(round(quantile(slope_diff_shannon_ng, c(0.025, 0.975)),2))
-legend("bottomright",
-       c(paste("Same Surveyor: R-sq = ", round(r2_same_shannon_ng[3],2), ", Slope [",tmp_same[1], ",", tmp_same[2] ,"]", sep = ""),
-         paste("Different Surveyors: R-sq = ", round(r2_diff_shannon_ng[3],2), ", Slope [",tmp_diff[1], ",", tmp_diff[2], "]", sep = "")),
-       col = collst[3:4], lty = 1, pch = 1:2, cex = 1, bty = "n")
-title("F. Non-Graminoids", adj = 0, line = 0.75)
-
-
-# simpson, all species
-pltlim = c(1, max(unlist(d_resurvey_ag_SI_same[,grep(pattern = "div_", x = colnames(d_resurvey_ag_SI_same), fixed = "TRUE")],
-                         d_resurvey_ag_SI_diff[,grep(pattern = "div_", x = colnames(d_resurvey_ag_SI_diff), fixed = "TRUE")]), na.rm=TRUE))
-plot(jitter(d_resurvey_ag_SI_same$div_1),
-     jitter(d_resurvey_ag_SI_same$div_2),
-     xlim = pltlim, ylim = pltlim,
-     xlab = "", ylab = "",
-     col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-mtext("Simpson, repeat surveys", 2, outer = FALSE, line = 2.5)
-
-points(jitter(d_resurvey_ag_SI_same$div_1), jitter(d_resurvey_ag_SI_same$div_3), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-points(jitter(d_resurvey_ag_SI_same$div_1), jitter(d_resurvey_ag_SI_same$div_4), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-
-points(jitter(d_resurvey_ag_SI_diff$div_1), jitter(d_resurvey_ag_SI_diff$div_2), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_SI_diff$div_1), jitter(d_resurvey_ag_SI_diff$div_3), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_SI_diff$div_1), jitter(d_resurvey_ag_SI_diff$div_4), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-
-abline(a=0, b = 1, lty = 2, lwd = 1.2)
-
-polygon(c(xsq_same_simpson, rev(xsq_same_simpson)), c(pred_same_simpson[,2], rev(pred_same_simpson[,4])),
-        col = adjustcolor(collst[3], alpha.f = 0.5), border = NA)
-lines(xsq_same_simpson, pred_same_simpson[,3], col = collst[3], lwd = 1.4)
-
-polygon(c(xsq_diff_simpson, rev(xsq_diff_simpson)), c(pred_diff_simpson[,2], rev(pred_diff_simpson[,4])),
-        col = adjustcolor(collst[4], alpha.f = 0.5), border = NA)
-lines(xsq_diff_simpson, pred_diff_simpson[,3], col = collst[4], lwd = 1.4)
-
-tmp_same = unname(round(quantile(slope_same_simpson, c(0.025, 0.975)),2))
-tmp_diff = unname(round(quantile(slope_diff_simpson, c(0.025, 0.975)),2))
-legend("bottomright",
-       c(paste("Same Surveyor: R-sq = ", round(r2_same_simpson[3],2), ", Slope [",tmp_same[1], ",", tmp_same[2] ,"]", sep = ""),
-         paste("Different Surveyors: R-sq = ", round(r2_diff_simpson[3],2), ", Slope [",tmp_diff[1], ",", tmp_diff[2], "]", sep = "")),
-       col = collst[3:4], lty = 1, pch = 1:2, cex = 1, bty = "n")
-title("G. All Species", adj = 0, line = 0.75)
-
-# simpson, graminoids
-pltlim = c(1, max(unlist(d_resurvey_ag_SI_same_g[,grep(pattern = "div_", x = colnames(d_resurvey_ag_SI_same_g), fixed = "TRUE")],
-                         d_resurvey_ag_SI_diff_g[,grep(pattern = "div_", x = colnames(d_resurvey_ag_SI_diff_g), fixed = "TRUE")]), na.rm=TRUE))
-plot(jitter(d_resurvey_ag_SI_same_g$div_1),
-     jitter(d_resurvey_ag_SI_same_g$div_2),
-     xlim = pltlim, ylim = pltlim,
-     xlab = "", ylab = "",
-     col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-mtext("Simpson, first survey", 1, line = 2.5)
-points(jitter(d_resurvey_ag_SI_same_g$div_1), jitter(d_resurvey_ag_SI_same_g$div_3), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-points(jitter(d_resurvey_ag_SI_same_g$div_1), jitter(d_resurvey_ag_SI_same_g$div_4), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-
-points(jitter(d_resurvey_ag_SI_diff_g$div_1), jitter(d_resurvey_ag_SI_diff_g$div_2), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_SI_diff_g$div_1), jitter(d_resurvey_ag_SI_diff_g$div_3), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_SI_diff_g$div_1), jitter(d_resurvey_ag_SI_diff_g$div_4), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-
-abline(a=0, b = 1, lty = 2, lwd = 1.2)
-
-polygon(c(xsq_same_simpson_g, rev(xsq_same_simpson_g)), c(pred_same_simpson_g[,2], rev(pred_same_simpson_g[,4])),
-        col = adjustcolor(collst[3], alpha.f = 0.5), border = NA)
-lines(xsq_same_simpson_g, pred_same_simpson_g[,3], col = collst[3], lwd = 1.4)
-
-polygon(c(xsq_diff_simpson_g, rev(xsq_diff_simpson_g)), c(pred_diff_simpson_g[,2], rev(pred_diff_simpson_g[,4])),
-        col = adjustcolor(collst[4], alpha.f = 0.5), border = NA)
-lines(xsq_diff_simpson_g, pred_diff_simpson_g[,3], col = collst[4], lwd = 1.4)
-
-tmp_same = unname(round(quantile(slope_same_simpson_g, c(0.025, 0.975)),2))
-tmp_diff = unname(round(quantile(slope_diff_simpson_g, c(0.025, 0.975)),2))
-legend("bottomright",
-       c(paste("Same Surveyor: R-sq = ", round(r2_same_simpson_g[3],2), ", Slope [",tmp_same[1], ",", tmp_same[2] ,"]", sep = ""),
-         paste("Different Surveyors: R-sq = ", round(r2_diff_simpson_g[3],2), ", Slope [",tmp_diff[1], ",", tmp_diff[2], "]", sep = "")),
-       col = collst[3:4], lty = 1, pch = 1:2, cex = 1, bty = "n")
-title("H. Graminoids", adj = 0, line = 0.75)
-
-# simpson, non-graminoids
-pltlim = c(1, max(unlist(d_resurvey_ag_SI_same_ng[,grep(pattern = "div_", x = colnames(d_resurvey_ag_SI_same_ng), fixed = "TRUE")],
-                         d_resurvey_ag_SI_diff_ng[,grep(pattern = "div_", x = colnames(d_resurvey_ag_SI_diff_ng), fixed = "TRUE")]), na.rm=TRUE))
-plot(jitter(d_resurvey_ag_SI_same_ng$div_1),
-     jitter(d_resurvey_ag_SI_same_ng$div_2),
-     xlim = pltlim, ylim = pltlim,
-     xlab = "", ylab = "",
-     col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-points(jitter(d_resurvey_ag_SI_same_ng$div_1), jitter(d_resurvey_ag_SI_same_ng$div_3), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-points(jitter(d_resurvey_ag_SI_same_ng$div_1), jitter(d_resurvey_ag_SI_same_ng$div_4), col = adjustcolor(collst[3], alpha.f = alpha_level), cex = cex_level)
-
-points(jitter(d_resurvey_ag_SI_diff_ng$div_1), jitter(d_resurvey_ag_SI_diff_ng$div_2), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_SI_diff_ng$div_1), jitter(d_resurvey_ag_SI_diff_ng$div_3), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-points(jitter(d_resurvey_ag_SI_diff_ng$div_1), jitter(d_resurvey_ag_SI_diff_ng$div_4), col = adjustcolor(collst[4], alpha.f = alpha_level), pch = 2, cex = cex_level)
-
-abline(a=0, b = 1, lty = 2, lwd = 1.2)
-
-polygon(c(xsq_same_simpson_ng, rev(xsq_same_simpson_ng)), c(pred_same_simpson_ng[,2], rev(pred_same_simpson_ng[,4])),
-        col = adjustcolor(collst[3], alpha.f = 0.5), border = NA)
-lines(xsq_same_simpson_ng, pred_same_simpson_ng[,3], col = collst[3], lwd = 1.4)
-
-polygon(c(xsq_diff_simpson_ng, rev(xsq_diff_simpson_ng)), c(pred_diff_simpson_ng[,2], rev(pred_diff_simpson_ng[,4])),
-        col = adjustcolor(collst[4], alpha.f = 0.5), border = NA)
-lines(xsq_diff_simpson_ng, pred_diff_simpson_ng[,3], col = collst[4], lwd = 1.4)
-
-tmp_same = unname(round(quantile(slope_same_simpson_ng, c(0.025, 0.975)),2))
-tmp_diff = unname(round(quantile(slope_diff_simpson_ng, c(0.025, 0.975)),2))
-legend("bottomright",
-       c(paste("Same Surveyor: R-sq = ", round(r2_same_simpson_ng[3],2), ", Slope [",tmp_same[1], ",", tmp_same[2] ,"]", sep = ""),
-         paste("Different Surveyors: R-sq = ", round(r2_diff_simpson_ng[3],2), ", Slope [",tmp_diff[1], ",", tmp_diff[2], "]", sep = "")),
-       col = collst[3:4], lty = 1, pch = 1:2, cex = 1, bty = "n")
-title("I. Non-Graminoids", adj = 0, line = 0.75)
 
 dev.off()
 
