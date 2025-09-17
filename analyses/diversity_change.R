@@ -44,8 +44,8 @@ d$ZeroObs_diff = apply(covdat_diff, 1, function(x) sum(!is.na(x) & x==0))
 d$Ntrials_diff = apply(covdat_diff, 1, function(x) sum(!is.na(x)))-1
 d$nonzero_cov_mean_diff = apply(covdat_diff, 1, function(x) mean(x[!is.na(x) & x>0], na.rm=TRUE))
 
-divdat = d[,c("SITE_CODE", "plot", "species", "cover", "group", "nonzero_cov_mean")]
-#divdat = divdat[!is.na(divdat$cover),]
+divdat = d[,c("SITE_CODE", "plot", "species", "cover", "group")]
+divdat = divdat[!is.na(divdat$cover) & divdat$cover!=0,]
 
 # simulate diversity change
 simulate_change = function(divdat, deltaS = -1) {
@@ -83,6 +83,7 @@ simulate_change = function(divdat, deltaS = -1) {
         
         new_species = divdat[divdat$SITE_CODE==site & !divdat$species %in% dtmp$species,]
         new_species = tapply(new_species$cover, new_species$species, mean)
+        new_groups = divdat$group[match(names(new_species), divdat$species)]
         
         S_target = S+deltaS
         S_max = S + length(new_species)
@@ -91,7 +92,8 @@ simulate_change = function(divdat, deltaS = -1) {
           uplot = sort(unique(dtmp$plot))
           dnew = data.frame(SITE_CODE=site, plot = uplot,
                                   species = names(new_species[rnd]),
-                                  cover = unname(new_species[rnd]))
+                                  cover = unname(new_species[rnd]),
+                                  group = unname(new_groups[rnd]))
           divdat_new = rbind(divdat_new, dnew)
         } else {
           # skip this entry, since deltaS is too large
@@ -116,132 +118,304 @@ simulate_change = function(divdat, deltaS = -1) {
 
 # calculate diversity indices
 hillfun = function(x, q = 0) {
-  x[x==0] = NA
-  if(is.null(dim(x))) {
-    x = matrix(x)
-  }
-  if(nrow(x)>1) {
-    p = x/rep(colSums(x, na.rm=TRUE), each = nrow(x))
-    if(q == 0) {
-      D = colSums(x>0, na.rm=TRUE)
-    } else if(q == 1) {
-      D = exp(-colSums(p*log(p), na.rm = TRUE))
-    } else {
-      D = colSums(p^q,na.rm=TRUE)^(1/(1-q))
+  if(sum(x, na.rm=T)>0) {
+    x[x==0] = NA
+    if(is.null(dim(x))) {
+      x = matrix(x)
     }
-    D[!is.finite(D)] = NA
-    D[apply(x, 2, function(y) all(is.na(y)))] = NA
-    return(D)
+    if(nrow(x)>=1) {
+      p = x/rep(colSums(x, na.rm=TRUE), each = nrow(x))
+      if(q == 0) {
+        D = colSums(x>0, na.rm=TRUE)
+      } else if(q == 1) {
+        D = exp(-colSums(p*log(p), na.rm = TRUE))
+      } else {
+        D = colSums(p^q,na.rm=TRUE)^(1/(1-q))
+      }
+      D[!is.finite(D)] = NA
+      D[apply(x, 2, function(y) all(is.na(y)))] = NA
+      return(D)
+    } else {
+      return(NA)
+    }
   } else {
-    return(NA)
+    return(0)
   }
 }
 
 # add noise to observations
 simulate_noise = function(divdat) {
+  divdat_out = divdat[,c("SITE_CODE", "plot", "species", "cover", "group")]
+  
+  ## make presence/absence error
   # make estimates for a single resurvey
   divdat$Ntrials_same = 1
   divdat$Ntrials_diff = 1
   
   # get pq for self-resurvey
-  divdat$nonzero_cov_mean_same =  divdat$nonzero_cov_mean
+  divdat$nonzero_cov_mean_same =  divdat$cover
   regression_same = colMeans(posterior_epred(mod_pgs, newdata = divdat, re_formula = NA))
   divdat$pzero_same = regression_same
   divdat$pq_hat_same = (regression_same)/(2-regression_same)
   
   # get q for non-self survey
-  divdat$nonzero_cov_mean_diff =  divdat$nonzero_cov_mean
+  divdat$nonzero_cov_mean_diff =  divdat$cover
   regression_diff =colMeans(posterior_epred(mod_pd, newdata = divdat, re_formula = NA))
   divdat$pzero_diff = regression_diff
   divdat$p_hat_diff = with(divdat, (sqrt(2) *sqrt(-pq_hat_same* regression_diff^2 + 3 *pq_hat_same* regression_diff - 2 *pq_hat_same + regression_diff^2 - 3 *regression_diff + 2) + regression_diff - 2)/(regression_diff - 2))
   divdat$q_hat_diff = with(divdat, (regression_diff*(1-p_hat_diff^2+2*p_hat_diff)-(-2*p_hat_diff^2+4*p_hat_diff))/(-2+regression_diff*2)/p_hat_diff)
   
+  # simulate noise
+  # same surveyor, only missing errors
+  error_same = rbinom(nrow(divdat), 1, prob = divdat$pq_hat_same)
+  missed_species_same = error_same
+  id_error_diff_same = rep(0, length(error_same))
   
-  q_hat = (-(p_hat^2*(regression_diff - 2)) + 2*p_hat*(regression_diff - 2) + regression_diff)/(2*p_hat*(regression_diff - 1))
+  # different surveyor, missing errors AND ID errors
+  error_diff = rbinom(nrow(divdat), 1, prob = divdat$p_hat_diff)
+  tmp = rbinom(sum(error_diff), 1, prob = divdat$q_hat_diff[error_diff==1])
+  missed_species_diff = id_error_diff = rep(0, nrow(divdat))
+  missed_species_diff[error_diff==1][tmp==1] = 1
+  id_error_diff[error_diff==1][tmp==0] = 1
   
-  hist(pmax(pmin(q_hat,1),0))
+  # mask missing species
+  divdat_out$cover_resurvey_diff = divdat_out$cover_resurvey_same = divdat_out$cover
+  divdat_out$cover_resurvey_same[missed_species_same==1] = 0
+  divdat_out$cover_resurvey_diff[missed_species_diff==1] = 0
   
-  # get p, shared, and alpha for each plot
-  p = tapply(divdat$p_hat, paste(divdat$SITE_CODE, divdat$plot), mean)
-  alpha_1 = tapply(covdat_diff[,1]>0, paste(divdat$SITE_CODE, divdat$plot), function(x) sum(x,na.rm=TRUE))
-  alpha_2 = tapply(covdat_diff[,2]>0, paste(divdat$SITE_CODE, divdat$plot), function(x) sum(x,na.rm=TRUE))
-  shared = tapply((covdat_diff[,1]>0) & (covdat_diff[,2]>0), paste(divdat$SITE_CODE, divdat$plot), function(x) sum(x,na.rm=TRUE))
-  gamma = tapply((covdat_diff[,1]>0) | (covdat_diff[,2]>0), paste(divdat$SITE_CODE, divdat$plot), function(x) sum(x,na.rm=TRUE))
-  ps = alpha_1 > 0 & alpha_2 > 0
-  #plot(alpha_1[ps], alpha_2[ps])
-  #abline(a=0,b=1,lty=3)
-  #N_hat = shared[ps]/((1-p[ps])^2)
-  #plot(N_hat, gamma[ps])
-  #q_hat = (1-alpha_2[ps]/N_hat)/p[ps]
-  R = tapply(regression_diff, paste(divdat$SITE_CODE, divdat$plot), mean)
+  # add in new rows for ID errors
+  tmp = divdat_out[id_error_diff==1,]
+  tmp$cover = tmp$cover_resurvey_same = 0
+  tmp$species=paste(tmp$species, "_ID_error", sep = "")
+  divdat_out$cover_resurvey_diff[id_error_diff==1] = 0
+  divdat_out = rbind(divdat_out, tmp)
   
-  tmp = data.frame(shared = shared[ps],
-             alpha_1 = alpha_1[ps],
-             alpha_2 = alpha_2[ps],
-             gamma = gamma[ps],
-             p = round(p[ps],3),
-             R = R[ps])
+  # re-sort dataframe
+  divdat_out = divdat_out[order(divdat_out$SITE_CODE, divdat_out$plot, divdat_out$species),]
   
-  #tmp$p_est_q1 = round((tmp$gamma-tmp$shared)/tmp$gamma,3)
-  #tmp$p_est_q0 = round(((tmp$gamma-tmp$shared)/2)/(tmp$gamma-(tmp$gamma-tmp$shared)/2),3)
-  tmp = colMeans(tmp)
-  tmp
-  # N_hat[2]
+  ## add in cover error
+  moddat=divdat_out
+  moddat$cov_mean_same =  moddat$cover_resurvey_same
+  moddat = moddat[moddat$cov_mean_same>0,]
+  covermodel_same = colMeans(posterior_epred(mod_cgs, newdata = moddat, re_formula = NA))
+  ps = divdat_out$cover_resurvey_same>0
+  # recall model predicts CV, so updated value is (rnorm(CV)+1)*mu
+  # setting minimum observation to 0.01%
+  divdat_out$cover_resurvey_same[ps] =
+    pmax(1e-04, (rnorm(length(covermodel_same), 0, covermodel_same)+1)*divdat_out$cover_resurvey_same[ps])
   
-  # likelihood of shared = 7, gamma = 9
-  p = 0.047
-  q = seq(0,1,length=100)
-  plot(q, log((p*q)^2+
-              (1-p)*(p*(1-q))+
-                (p*(1-q))*(p*(1-q))), type = "l")
+  moddat=divdat_out
+  moddat$cov_mean_diff =  moddat$cover_resurvey_diff
+  moddat = moddat[moddat$cov_mean_diff>0,]
+  covermodel_diff = colMeans(posterior_epred(mod_cgd, newdata = moddat, re_formula = NA))
+  ps = divdat_out$cover_resurvey_diff>0
+  divdat_out$cover_resurvey_diff[ps] =
+    pmax(1e-04, (rnorm(length(covermodel_diff), 0, covermodel_diff)+1)*divdat_out$cover_resurvey_diff[ps])
   
-  
-  
-  # aggregate by site
-  divdat_ag = with(divdat, aggregate(
-    list(p_hat=p_hat, pzero_same=pzero_same, pzero_diff=pzero_diff),
-    list(SITE_CODE=SITE_CODE, plot=plot),
-    FUN = sum
-  ))
-  
-  # estimate overall q (for each site?)
-  
-  plot(divdat$cover, divdat$p_hat)
-  plot(divdat$cover, regression_same)
-  
-  # get q for non-self-resurvey
-  plot(regression_diff, regression_same)
-  
-  matplot(divdat$cover, cbind(regression_same, regression_diff), pch=1)
-  
-  
-  # aggregate by site
-  tmp = divdat
-  R = predict(mod_pd, newdata = tmp, re_formula = ~0)[,1]
-  p = tmp$p_hat
-  q = pmin(pmax((-(p^2*(R-2))+2*p*(R-2)+R)/(2*p*(R-1)),0),1)
-  plot(p,q)
-  
-  p = p_hat; R = regression_diff
-  q_hat = (-(p^2*(R-2))+2*p*(R-2)+R)/(2*p*(R-1))
-  
-  R = regression_same/regression_diff
-  p = p_hat
-  q_hat = (-(p^2*(R - 1)) + p*(R - 2) + 2*R - 1)/
-    (p*(R - 2) + R)
-  
-  # if error, then 50% chance of ID mistake, and 50% of missing observation
-  # or just chance of missing?
+  # return output
+  # new columns include estimates for
+  # resurveys from same vs. different surveyor
+  return(divdat_out)
 }
 
+# calculate alpha diversity
+#divdat_out=simulate_noise(divdat)
 
-# compare observations (both alpha change and turnover)
+get_alpha = function(divdat_out, q = 0) {
+  alpha_out = unique(divdat_out[,c("SITE_CODE", "plot")])
+  alpha_out$alpha_different = alpha_out$alpha_same = alpha_out$alpha_true = NA
+  
+  indexa = paste(alpha_out$SITE_CODE, alpha_out$plot)
+  indexd = paste(divdat_out$SITE_CODE, divdat_out$plot)
+  uindex = sort(unique(indexa))
 
+  for(i in 1:length(uindex)) {
+    ps = which(indexd==uindex[i])
+    ps_a = which(indexa==uindex[i])
+    alpha_out$alpha_true[ps_a] = hillfun(divdat_out$cover[ps], q = q)
+    alpha_out$alpha_same[ps_a] = hillfun(divdat_out$cover_resurvey_same[ps], q = q)
+    alpha_out$alpha_different[ps_a] = hillfun(divdat_out$cover_resurvey_diff[ps], q = q)
+  }
+  
+  return(alpha_out)
+}
+
+# calculate turnover between two samples
+#divdat_out_1=simulate_noise(divdat)
+#divdat_out_2=simulate_noise(divdat)
+
+get_beta = function(divdat_out_1, divdat_out_2, q = 0) {
+  beta_out = unique(rbind(divdat_out_1[,c("SITE_CODE", "plot")],
+                           divdat_out_2[,c("SITE_CODE", "plot")]))
+  beta_out$beta_different = beta_out$beta_same = beta_out$beta_true = NA
+  beta_out$gamma_different = beta_out$gamma_same = beta_out$gamma_true = NA
+  beta_out$alpha_1_different = beta_out$alpha_1_same = beta_out$alpha_1_true = NA
+  beta_out$alpha_2_different = beta_out$alpha_2_same = beta_out$alpha_2_true = NA
+  
+  # create combined dataset
+  divdat_out_agg = with(rbind(divdat_out_1, divdat_out_2),
+       aggregate(x = list(cover=cover, cover_resurvey_same=cover_resurvey_same, cover_resurvey_diff=cover_resurvey_diff),
+                 by = list(SITE_CODE=SITE_CODE, plot=plot, species=species, group=group),
+                 FUN = function(x) sum(x, na.rm=TRUE)))
+  
+  indexb = paste(beta_out$SITE_CODE, beta_out$plot)
+  indexd_1 = paste(divdat_out_1$SITE_CODE, divdat_out_1$plot)
+  indexd_2 = paste(divdat_out_2$SITE_CODE, divdat_out_2$plot)
+  indexd_agg = paste(divdat_out_agg$SITE_CODE, divdat_out_agg$plot)
+  uindex = sort(unique(indexb))
+  
+  no_comparison_possible = rep(0, length(uindex))
+  
+  for(i in 1:length(uindex)) {
+    ps_1 = which(indexd_1==uindex[i])
+    ps_2 = which(indexd_2==uindex[i])
+    ps_b = which(indexb==uindex[i])
+    ps_agg = which(indexd_agg==uindex[i])
+    
+    if(all(length(ps_1)>0,
+           length(ps_2)>0,
+           length(ps_b)>0,
+           length(ps_agg)>0)) {
+      alpha_true_1 = hillfun(divdat_out_1$cover[ps_1], q = q)
+      alpha_same_1 = hillfun(divdat_out_1$cover_resurvey_same[ps_1], q = q)
+      alpha_different_1 = hillfun(divdat_out_1$cover_resurvey_diff[ps_1], q = q)
+      
+      alpha_true_2 = hillfun(divdat_out_2$cover[ps_2], q = q)
+      alpha_same_2 = hillfun(divdat_out_2$cover_resurvey_same[ps_2], q = q)
+      alpha_different_2 = hillfun(divdat_out_2$cover_resurvey_diff[ps_2], q = q)
+      
+      gamma_true = hillfun(divdat_out_agg$cover[ps_agg], q = q)
+      gamma_same = hillfun(divdat_out_agg$cover_resurvey_same[ps_agg], q = q)
+      gamma_different = hillfun(divdat_out_agg$cover_resurvey_diff[ps_agg], q = q)
+      
+      beta_out$beta_true[ps_b] = gamma_true/((alpha_true_1+alpha_true_2)/2)
+      beta_out$beta_same[ps_b] = gamma_same/((alpha_same_1+alpha_same_2)/2)
+      beta_out$beta_different[ps_b] = gamma_different/((alpha_different_1+alpha_different_2)/2)
+      
+      beta_out$gamma_true[ps_b] = gamma_true
+      beta_out$gamma_same[ps_b] = gamma_same
+      beta_out$gamma_different[ps_b] = gamma_different
+      
+      beta_out$alpha_1_true[ps_b] = alpha_true_1
+      beta_out$alpha_1_same[ps_b] = alpha_same_1
+      beta_out$alpha_1_different[ps_b] = alpha_different_1
+      
+      beta_out$alpha_2_true[ps_b] = alpha_true_2
+      beta_out$alpha_2_same[ps_b] = alpha_same_2
+      beta_out$alpha_2_different[ps_b] = alpha_different_2
+    } else {
+      no_comparison_possible[ps_b] = 1
+    }
+  }
+  beta_out = beta_out[no_comparison_possible==0,]
+  
+  return(beta_out)
+}
 
 # loop: test observed change across deltaS values
 deltaS_lvls = -10:10
 
-# two samples: one for the initial, and one for the changed
-# then compare them
+simout_rich = NULL
+simout_shannon = NULL
+simout_simpson = NULL
+for(i in 1:length(deltaS_lvls)) {
+  divdat_new = simulate_change(divdat, deltaS = deltaS_lvls[i])
+  
+  divdat_0 = simulate_noise(divdat)
+  divdat_1 = simulate_noise(divdat_new)
+  
+  beta_out_rich = get_beta(divdat_out_1 = divdat_0, divdat_out_2 = divdat_1, q = 0)
+  simout_rich = rbind(simout_rich,
+                 data.frame(beta_out_rich, dS = deltaS_lvls[i]))
+  
+  beta_out_shannon = get_beta(divdat_out_1 = divdat_0, divdat_out_2 = divdat_1, q = 1)
+  simout_shannon = rbind(simout_shannon,
+                      data.frame(beta_out_shannon, dS = deltaS_lvls[i]))
+  
+  beta_out_simpson = get_beta(divdat_out_1 = divdat_0, divdat_out_2 = divdat_1, q = 2)
+  simout_simpson = rbind(simout_simpson,
+                      data.frame(beta_out_simpson, dS = deltaS_lvls[i]))
+  
+  cat("\r", round(i/length(deltaS_lvls),2))
+}
 
-## TODO: or just once? or different for cover vs. id error?
+## analyse and plot results
+# TODO
+# break up by ***group***, surveyor, and index
+# calculate bias and goodness of fit?...
+# (use same algorithm as for other plots)
+# maybe separate reports for each simulated diversity change level?
+
+#TOTAL:
+#rich
+plot(simout_rich$alpha_1_true-simout_rich$alpha_2_true,
+     simout_rich$alpha_1_same-simout_rich$alpha_2_same,
+     xlab = "Richness change, true", ylab = "Richness change, observed")
+abline(a=0, b=1, lty=2)
+
+plot(simout_rich$alpha_1_true-simout_rich$alpha_2_true,
+     simout_rich$alpha_1_diff-simout_rich$alpha_2_diff,
+     xlab = "Richness change, true", ylab = "Richness change, observed")
+abline(a=0, b=1, lty=2)
+
+plot(simout_rich$beta_true,
+     simout_rich$beta_same,
+     xlab = "Beta, true", ylab = "Beta, observed")
+abline(a=0, b=1, lty=2)
+
+plot(simout_rich$beta_true,
+     simout_rich$beta_diff,
+     xlab = "Beta, true", ylab = "Beta, observed")
+abline(a=0, b=1, lty=2)
+
+
+# shannon
+plot(simout_shannon$alpha_1_true-simout_shannon$alpha_2_true,
+     simout_shannon$alpha_1_same-simout_shannon$alpha_2_same,
+     xlab = "Shannon change, true", ylab = "Shannon change, observed")
+abline(a=0, b=1, lty=2)
+
+plot(simout_shannon$alpha_1_true-simout_shannon$alpha_2_true,
+     simout_shannon$alpha_1_diff-simout_shannon$alpha_2_diff,
+     xlab = "Shannon change, true", ylab = "Shannon change, observed")
+abline(a=0, b=1, lty=2)
+
+plot(simout_shannon$beta_true,
+     simout_shannon$beta_same,
+     xlab = "Beta, true", ylab = "Beta, observed")
+abline(a=0, b=1, lty=2)
+
+plot(simout_shannon$beta_true,
+     simout_shannon$beta_diff,
+     xlab = "Beta, true", ylab = "Beta, observed")
+abline(a=0, b=1, lty=2)
+
+
+
+# simpson
+plot(simout_simpson$alpha_1_true-simout_simpson$alpha_2_true,
+     simout_simpson$alpha_1_same-simout_simpson$alpha_2_same,
+     xlab = "Simpson change, true", ylab = "Simpson change, observed")
+abline(a=0, b=1, lty=2)
+
+plot(simout_simpson$alpha_1_true-simout_simpson$alpha_2_true,
+     simout_simpson$alpha_1_diff-simout_simpson$alpha_2_diff,
+     xlab = "Simpson change, true", ylab = "Simpson change, observed")
+abline(a=0, b=1, lty=2)
+
+plot(simout_simpson$beta_true,
+     simout_simpson$beta_same,
+     xlab = "Beta, true", ylab = "Beta, observed")
+abline(a=0, b=1, lty=2)
+
+plot(simout_simpson$beta_true,
+     simout_simpson$beta_diff,
+     xlab = "Beta, true", ylab = "Beta, observed")
+abline(a=0, b=1, lty=2)
+
+
+### Graminoids
+
+
+
+### Non-Graminoids
