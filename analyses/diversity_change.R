@@ -15,12 +15,37 @@ d = d[d$trt=="Control",]
 
 # get cover data
 covdat = d[,grep("cover_", colnames(d))]
-covdat[!is.na(covdat) & covdat==0] = NA
 covdat = covdat/100
-d$cover = covdat[,1] # keep only first survey
+d$cover = covdat[,1] # save first survey
+d$nonzero_cov_mean = apply(covdat, 1, function(x) mean(x[!is.na(x) & x>0], na.rm=TRUE))
 
-divdat = d[,c("SITE_CODE", "plot", "species", "cover")]
-divdat = divdat[!is.na(divdat$cover),]
+# get self- vs. non-self data
+# same surveyor
+surveyor = d[,grep("surveyor_", colnames(d))]
+ps = surveyor!=surveyor[,1]
+ps[is.na(ps)] = TRUE
+covdat_same = covdat
+covdat_same[ps] = NA
+covdat_same[which(rowSums(covdat_same, na.rm=TRUE)==0),] = NA
+
+d$ZeroObs_same = apply(covdat_same, 1, function(x) sum(!is.na(x) & x==0))
+d$Ntrials_same = apply(covdat_same, 1, function(x) sum(!is.na(x)))-1
+d$nonzero_cov_mean_same = apply(covdat_same, 1, function(x) mean(x[!is.na(x) & x>0], na.rm=TRUE))
+
+# different surveyor
+ps = surveyor==surveyor[,1]
+ps[,-1][is.na(ps[,-1])] = TRUE
+ps[,1][!is.na(ps[,1])] = FALSE
+covdat_diff = covdat
+covdat_diff[ps] = NA
+covdat_diff[which(rowSums(covdat_diff, na.rm=TRUE)==0),] = NA
+
+d$ZeroObs_diff = apply(covdat_diff, 1, function(x) sum(!is.na(x) & x==0))
+d$Ntrials_diff = apply(covdat_diff, 1, function(x) sum(!is.na(x)))-1
+d$nonzero_cov_mean_diff = apply(covdat_diff, 1, function(x) mean(x[!is.na(x) & x>0], na.rm=TRUE))
+
+divdat = d[,c("SITE_CODE", "plot", "species", "cover", "group", "nonzero_cov_mean")]
+#divdat = divdat[!is.na(divdat$cover),]
 
 # simulate diversity change
 simulate_change = function(divdat, deltaS = -1) {
@@ -114,7 +139,96 @@ hillfun = function(x, q = 0) {
 
 # add noise to observations
 simulate_noise = function(divdat) {
+  # make estimates for a single resurvey
+  divdat$Ntrials_same = 1
+  divdat$Ntrials_diff = 1
   
+  # get pq for self-resurvey
+  divdat$nonzero_cov_mean_same =  divdat$nonzero_cov_mean
+  regression_same = colMeans(posterior_epred(mod_pgs, newdata = divdat, re_formula = NA))
+  divdat$pzero_same = regression_same
+  divdat$pq_hat_same = (regression_same)/(2-regression_same)
+  
+  # get q for non-self survey
+  divdat$nonzero_cov_mean_diff =  divdat$nonzero_cov_mean
+  regression_diff =colMeans(posterior_epred(mod_pd, newdata = divdat, re_formula = NA))
+  divdat$pzero_diff = regression_diff
+  divdat$p_hat_diff = with(divdat, (sqrt(2) *sqrt(-pq_hat_same* regression_diff^2 + 3 *pq_hat_same* regression_diff - 2 *pq_hat_same + regression_diff^2 - 3 *regression_diff + 2) + regression_diff - 2)/(regression_diff - 2))
+  divdat$q_hat_diff = with(divdat, (regression_diff*(1-p_hat_diff^2+2*p_hat_diff)-(-2*p_hat_diff^2+4*p_hat_diff))/(-2+regression_diff*2)/p_hat_diff)
+  
+  
+  q_hat = (-(p_hat^2*(regression_diff - 2)) + 2*p_hat*(regression_diff - 2) + regression_diff)/(2*p_hat*(regression_diff - 1))
+  
+  hist(pmax(pmin(q_hat,1),0))
+  
+  # get p, shared, and alpha for each plot
+  p = tapply(divdat$p_hat, paste(divdat$SITE_CODE, divdat$plot), mean)
+  alpha_1 = tapply(covdat_diff[,1]>0, paste(divdat$SITE_CODE, divdat$plot), function(x) sum(x,na.rm=TRUE))
+  alpha_2 = tapply(covdat_diff[,2]>0, paste(divdat$SITE_CODE, divdat$plot), function(x) sum(x,na.rm=TRUE))
+  shared = tapply((covdat_diff[,1]>0) & (covdat_diff[,2]>0), paste(divdat$SITE_CODE, divdat$plot), function(x) sum(x,na.rm=TRUE))
+  gamma = tapply((covdat_diff[,1]>0) | (covdat_diff[,2]>0), paste(divdat$SITE_CODE, divdat$plot), function(x) sum(x,na.rm=TRUE))
+  ps = alpha_1 > 0 & alpha_2 > 0
+  #plot(alpha_1[ps], alpha_2[ps])
+  #abline(a=0,b=1,lty=3)
+  #N_hat = shared[ps]/((1-p[ps])^2)
+  #plot(N_hat, gamma[ps])
+  #q_hat = (1-alpha_2[ps]/N_hat)/p[ps]
+  R = tapply(regression_diff, paste(divdat$SITE_CODE, divdat$plot), mean)
+  
+  tmp = data.frame(shared = shared[ps],
+             alpha_1 = alpha_1[ps],
+             alpha_2 = alpha_2[ps],
+             gamma = gamma[ps],
+             p = round(p[ps],3),
+             R = R[ps])
+  
+  #tmp$p_est_q1 = round((tmp$gamma-tmp$shared)/tmp$gamma,3)
+  #tmp$p_est_q0 = round(((tmp$gamma-tmp$shared)/2)/(tmp$gamma-(tmp$gamma-tmp$shared)/2),3)
+  tmp = colMeans(tmp)
+  tmp
+  # N_hat[2]
+  
+  # likelihood of shared = 7, gamma = 9
+  p = 0.047
+  q = seq(0,1,length=100)
+  plot(q, log((p*q)^2+
+              (1-p)*(p*(1-q))+
+                (p*(1-q))*(p*(1-q))), type = "l")
+  
+  
+  
+  # aggregate by site
+  divdat_ag = with(divdat, aggregate(
+    list(p_hat=p_hat, pzero_same=pzero_same, pzero_diff=pzero_diff),
+    list(SITE_CODE=SITE_CODE, plot=plot),
+    FUN = sum
+  ))
+  
+  # estimate overall q (for each site?)
+  
+  plot(divdat$cover, divdat$p_hat)
+  plot(divdat$cover, regression_same)
+  
+  # get q for non-self-resurvey
+  plot(regression_diff, regression_same)
+  
+  matplot(divdat$cover, cbind(regression_same, regression_diff), pch=1)
+  
+  
+  # aggregate by site
+  tmp = divdat
+  R = predict(mod_pd, newdata = tmp, re_formula = ~0)[,1]
+  p = tmp$p_hat
+  q = pmin(pmax((-(p^2*(R-2))+2*p*(R-2)+R)/(2*p*(R-1)),0),1)
+  plot(p,q)
+  
+  p = p_hat; R = regression_diff
+  q_hat = (-(p^2*(R-2))+2*p*(R-2)+R)/(2*p*(R-1))
+  
+  R = regression_same/regression_diff
+  p = p_hat
+  q_hat = (-(p^2*(R - 1)) + p*(R - 2) + 2*R - 1)/
+    (p*(R - 2) + R)
   
   # if error, then 50% chance of ID mistake, and 50% of missing observation
   # or just chance of missing?
