@@ -2,13 +2,16 @@ setwd("~/Dropbox/Projects/117_ObservationError/src")
 rm(list = ls())
 #source("util/save_model_outputs.R")
 require(brms)
+require(nlme)
 load("output/brms_coverid_models_small.rda")
 #load("output/diversity_change.rda")
 
+set.seed(123432)
+
 collst = c("purple", "forestgreen", "dodgerblue3", "firebrick")
-alpha_level = 0.3
+alpha_level = 0.5
 cex_level = 0.8
-xsq = seq(0, 1, length = 1e3)
+lwduse = 1.5
 
 d = read.csv("data/NutNet_ReSurvey_processed_250821.csv")
 d = d[d$trt=="Control",]
@@ -169,8 +172,7 @@ simulate_noise = function(divdat) {
   # same surveyor, only missing errors
   error_same = rbinom(nrow(divdat), 1, prob = divdat$pq_hat_same)
   missed_species_same = error_same
-  id_error_diff_same = rep(0, length(error_same))
-  
+
   # different surveyor, missing errors AND ID errors
   error_diff = rbinom(nrow(divdat), 1, prob = divdat$p_hat_diff)
   tmp = rbinom(sum(error_diff), 1, prob = divdat$q_hat_diff[error_diff==1])
@@ -340,82 +342,97 @@ for(i in 1:length(deltaS_lvls)) {
 }
 
 ## analyse and plot results
-# TODO
-# break up by ***group***, surveyor, and index
-# calculate bias and goodness of fit?...
-# (use same algorithm as for other plots)
-# maybe separate reports for each simulated diversity change level?
+plot_delta_function = function(simout, dobs, colu = 1, ylim=c(-1,1), doplot=TRUE) {
+  simout$derror = dobs
+  mod = lme(derror~-1+as.factor(dS),
+            data = simout,
+            random = ~1|SITE_CODE/plot)
+  cfs = summary(mod)$tTable
+  dS_lst = sort(unique(simout$dS))
+  
+  if(doplot) {
+    plot(0, 0,
+         type = "n",,
+         xlim = range(dS_lst),
+         ylim = ylim,
+         ylab = "", xlab = "")
+    abline(h=0, lty=2)
+    abline(v=0,lty=3)
+  }
+  polygon(c(dS_lst, rev(dS_lst)),
+          c(cfs[,1]+cfs[,2]*qnorm(0.025),
+            rev(cfs[,1]+cfs[,2]*qnorm(0.975))),
+          col = adjustcolor(colu,alpha.f = alpha_level),
+          border = NA)
+  lines(dS_lst, cfs[,1], lwd = lwduse,
+        col = adjustcolor(colu,alpha.f = alpha_level))
+}
+
+pdf("figures/diversity_change.pdf", width = 5, height = 6)
+#png("figures/diversity_change.png", width = 5, height = 6, units = "in", res = 200)
+
+par(mfrow = c(3,2), mar=c(2,2,1.5,1), oma = c(2,2,0,0))
+lm_alpha = c(-0.15, 0.15)
+lm_beta = c(-0.05, 0.15)
 
 #TOTAL:
 #rich
-plot(simout_rich$alpha_1_true-simout_rich$alpha_2_true,
-     simout_rich$alpha_1_same-simout_rich$alpha_2_same,
-     xlab = "Richness change, true", ylab = "Richness change, observed")
-abline(a=0, b=1, lty=2)
+dtrue = (simout_rich$alpha_2_true-simout_rich$alpha_1_true)
+dobs_same = ((simout_rich$alpha_2_same-simout_rich$alpha_1_same)-dtrue)/simout_rich$alpha_1_same
+plot_delta_function(simout = simout_rich,dobs = dobs_same, ylim = lm_alpha, colu = collst[3])
 
-plot(simout_rich$alpha_1_true-simout_rich$alpha_2_true,
-     simout_rich$alpha_1_diff-simout_rich$alpha_2_diff,
-     xlab = "Richness change, true", ylab = "Richness change, observed")
-abline(a=0, b=1, lty=2)
+dobs_diff = ((simout_rich$alpha_2_diff-simout_rich$alpha_1_diff)-dtrue)/simout_rich$alpha_1_diff
+plot_delta_function(simout = simout_rich,dobs = dobs_diff,ylim=lm_alpha, doplot = FALSE, colu = collst[4])
+title("A. Richness, alpha", adj = 0)
 
-plot(simout_rich$beta_true,
-     simout_rich$beta_same,
-     xlab = "Beta, true", ylab = "Beta, observed")
-abline(a=0, b=1, lty=2)
+dtrue = (simout_rich$beta_true)
+dobs_same = (simout_rich$beta_same)-dtrue
+plot_delta_function(simout = simout_rich,dobs = dobs_same, ylim = lm_beta, colu = collst[3])
 
-plot(simout_rich$beta_true,
-     simout_rich$beta_diff,
-     xlab = "Beta, true", ylab = "Beta, observed")
-abline(a=0, b=1, lty=2)
-
+dobs_diff = (simout_rich$beta_different)-dtrue
+plot_delta_function(simout = simout_rich,dobs = dobs_diff, ylim = lm_beta, colu = collst[4], doplot = FALSE)
+title("D. Richness, beta", adj = 0)
 
 # shannon
-plot(simout_shannon$alpha_1_true-simout_shannon$alpha_2_true,
-     simout_shannon$alpha_1_same-simout_shannon$alpha_2_same,
-     xlab = "Shannon change, true", ylab = "Shannon change, observed")
-abline(a=0, b=1, lty=2)
+dtrue = (simout_shannon$alpha_2_true-simout_shannon$alpha_1_true)
+dobs_same = ((simout_shannon$alpha_2_same-simout_shannon$alpha_1_same)-dtrue)/simout_shannon$alpha_1_same
+plot_delta_function(simout = simout_shannon,dobs = dobs_same, ylim = lm_alpha, colu = collst[3])
 
-plot(simout_shannon$alpha_1_true-simout_shannon$alpha_2_true,
-     simout_shannon$alpha_1_diff-simout_shannon$alpha_2_diff,
-     xlab = "Shannon change, true", ylab = "Shannon change, observed")
-abline(a=0, b=1, lty=2)
+dobs_diff = ((simout_shannon$alpha_2_diff-simout_shannon$alpha_1_diff)-dtrue)/simout_shannon$alpha_1_diff
+plot_delta_function(simout = simout_shannon,dobs = dobs_diff,ylim=lm_alpha, colu = collst[4], doplot = FALSE)
+title("B. Shannon, alpha", adj = 0)
 
-plot(simout_shannon$beta_true,
-     simout_shannon$beta_same,
-     xlab = "Beta, true", ylab = "Beta, observed")
-abline(a=0, b=1, lty=2)
+dtrue = (simout_shannon$beta_true)
+dobs_same = (simout_shannon$beta_same)-dtrue
+plot_delta_function(simout = simout_shannon,dobs = dobs_same, ylim = lm_beta, colu = collst[3])
 
-plot(simout_shannon$beta_true,
-     simout_shannon$beta_diff,
-     xlab = "Beta, true", ylab = "Beta, observed")
-abline(a=0, b=1, lty=2)
-
-
+dobs_diff = (simout_shannon$beta_different)-dtrue
+plot_delta_function(simout = simout_shannon,dobs = dobs_diff, ylim = lm_beta, colu = collst[4], doplot = FALSE)
+title("E. Shannon, beta", adj = 0)
 
 # simpson
-plot(simout_simpson$alpha_1_true-simout_simpson$alpha_2_true,
-     simout_simpson$alpha_1_same-simout_simpson$alpha_2_same,
-     xlab = "Simpson change, true", ylab = "Simpson change, observed")
-abline(a=0, b=1, lty=2)
+dtrue = (simout_simpson$alpha_2_true-simout_simpson$alpha_1_true)
+dobs_same = ((simout_simpson$alpha_2_same-simout_simpson$alpha_1_same)-dtrue)/simout_simpson$alpha_1_same
+plot_delta_function(simout = simout_simpson,dobs = dobs_same, ylim = lm_alpha, colu = collst[3])
 
-plot(simout_simpson$alpha_1_true-simout_simpson$alpha_2_true,
-     simout_simpson$alpha_1_diff-simout_simpson$alpha_2_diff,
-     xlab = "Simpson change, true", ylab = "Simpson change, observed")
-abline(a=0, b=1, lty=2)
+dobs_diff = ((simout_simpson$alpha_2_diff-simout_simpson$alpha_1_diff)-dtrue)/simout_simpson$alpha_1_diff
+plot_delta_function(simout = simout_simpson,dobs = dobs_diff,ylim=lm_alpha, colu = collst[4], doplot = FALSE)
+title("C. Simpson, alpha", adj = 0)
 
-plot(simout_simpson$beta_true,
-     simout_simpson$beta_same,
-     xlab = "Beta, true", ylab = "Beta, observed")
-abline(a=0, b=1, lty=2)
+dtrue = (simout_simpson$beta_true)
+dobs_same = (simout_simpson$beta_same)-dtrue
+plot_delta_function(simout = simout_simpson,dobs = dobs_same, ylim = lm_beta, colu = collst[3])
 
-plot(simout_simpson$beta_true,
-     simout_simpson$beta_diff,
-     xlab = "Beta, true", ylab = "Beta, observed")
-abline(a=0, b=1, lty=2)
+dobs_diff = (simout_simpson$beta_different)-dtrue
+plot_delta_function(simout = simout_simpson,dobs = dobs_diff, ylim = lm_beta, colu = collst[4], doplot = FALSE)
+title("F. Simpson, beta", adj = 0)
 
+mtext("Relative bias", side = 2, outer = TRUE, line = 0.6)
+mtext("Simulated change in richness", side = 1, outer = TRUE, line = 0.6)
 
-### Graminoids
+legend(-10, .16, c("Same Surveyor", "Different Surveyors"),
+       #fill = adjustcolor(collst[3:4], alpha_level),
+       lty = 1, col = collst[3:4],
+       bty = "n", cex = 1.2)
 
-
-
-### Non-Graminoids
+dev.off()
