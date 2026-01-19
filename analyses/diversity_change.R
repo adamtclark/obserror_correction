@@ -453,7 +453,7 @@ annotate_plot2 = function(xlm = c(-10, 10), ylm = c(-0.04, 0.14)) {
 }
 
 pdf("figures/diversity_change.pdf", width = 7, height = 6)
-#png("figures/diversity_change.png", width = 5, height = 6, units = "in", res = 200)
+#png("figures/diversity_change.png", width = 7, height = 6, units = "in", res = 200)
 
 par(mfrow = c(3,2), mar=c(2,2,1.5,1), oma = c(2,2,0,0))
 lm_alpha = c(-0.15, 0.15)
