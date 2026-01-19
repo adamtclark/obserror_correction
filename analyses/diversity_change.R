@@ -186,11 +186,13 @@ simulate_noise = function(divdat) {
   divdat_out$cover_resurvey_diff[missed_species_diff==1] = 0
   
   # add in new rows for ID errors
-  tmp = divdat_out[id_error_diff==1,]
-  tmp$cover = tmp$cover_resurvey_same = 0
-  tmp$species=paste(tmp$species, "_ID_error", sep = "")
-  divdat_out$cover_resurvey_diff[id_error_diff==1] = 0
-  divdat_out = rbind(divdat_out, tmp)
+  if(sum(id_error_diff)>0) {
+    tmp = divdat_out[id_error_diff==1,]
+    tmp$cover = tmp$cover_resurvey_same = 0
+    tmp$species=paste(tmp$species, "_ID_error", sep = "")
+    divdat_out$cover_resurvey_diff[id_error_diff==1] = 0
+    divdat_out = rbind(divdat_out, tmp)
+  }
   
   # re-sort dataframe
   divdat_out = divdat_out[order(divdat_out$SITE_CODE, divdat_out$plot, divdat_out$species),]
@@ -218,6 +220,62 @@ simulate_noise = function(divdat) {
   # new columns include estimates for
   # resurveys from same vs. different surveyor
   return(divdat_out)
+}
+
+
+get_pq_est =  function(divdat, type = "same", ntrials = 1, maskzeros = TRUE) {
+  if(sum(colnames(divdat)=="cover")>0) {
+    oldcover = divdat$cover
+  } else {
+    oldcover = NULL
+  }
+  
+  if(type == "same") {
+    divdat$cover = divdat$cover_resurvey_same
+  } else if(type == "diff") {
+    divdat$cover = divdat$cover_resurvey_diff
+  } else {
+    return("Error: type must be 'same' or 'diff'.")
+  }
+  
+  # get pq for self-resurvey
+  divdat$nonzero_cov_mean_same =  divdat$cover
+  divdat$Ntrials_same = ntrials
+  regression_same = colMeans(posterior_epred(mod_pgs, newdata = divdat, re_formula = NA))
+  divdat$pzero_same = regression_same
+  divdat$pq_hat_same = (regression_same)/(2-regression_same)
+  
+  # get q for non-self survey
+  divdat$nonzero_cov_mean_diff =  divdat$cover
+  divdat$Ntrials_diff = ntrials
+  regression_diff =colMeans(posterior_epred(mod_pd, newdata = divdat, re_formula = NA))
+  divdat$pzero_diff = regression_diff
+  divdat$p_hat_diff = with(divdat, (sqrt(2) *sqrt(-pq_hat_same* regression_diff^2 + 3 *pq_hat_same* regression_diff - 2 *pq_hat_same + regression_diff^2 - 3 *regression_diff + 2) + regression_diff - 2)/(regression_diff - 2))
+  divdat$q_hat_diff = with(divdat, (regression_diff*(1-p_hat_diff^2+2*p_hat_diff)-(-2*p_hat_diff^2+4*p_hat_diff))/(-2+regression_diff*2)/p_hat_diff)
+
+  divdat$nonzero_cov_mean_same = divdat$Ntrials_same = NULL
+  divdat$nonzero_cov_mean_diff = divdat$Ntrials_diff = NULL
+  divdat$pzero_same = divdat$pzero_diff = NULL
+  
+  if(type == "same") {
+    divdat$pi = divdat$pq_hat_same
+    divdat$qi = 1
+  } else if(type == "diff") {
+    divdat$pi = divdat$p_hat_diff
+    divdat$qi = divdat$q_hat_diff
+  }
+  
+  if(maskzeros) {
+    divdat$pi[divdat$cover==0] = NA
+    divdat$qi[divdat$cover==0] = NA
+  }
+  
+  divdat$p_hat_diff=divdat$q_hat_diff = NULL
+  divdat$pq_hat_same = NULL
+  
+  divdat$cover = oldcover
+
+  return(divdat)
 }
 
 # calculate alpha diversity
@@ -436,3 +494,65 @@ legend(-10, .16, c("Same Surveyor", "Different Surveyors"),
        bty = "n", cex = 1.2)
 
 dev.off()
+
+
+### now try MCMC fitting example
+set.seed(23432)
+
+## First, fix alpha diversity estimates
+# sample data
+deltaS = -2
+true_div0 = divdat[divdat$SITE_CODE=="kzbg.at.dragnet" & divdat$plot == 5,]
+true_div1 = simulate_change(true_div0, deltaS = deltaS)
+
+obs_div0 = simulate_noise(divdat = true_div0)
+obs_div1 = simulate_noise(divdat = true_div1)
+
+# check diversity estimates
+beta_test = get_beta(obs_div0, obs_div1)
+beta_test[,grep("beta", names(beta_test))]
+
+## run MCMC routine
+
+# merge
+obs_div = unique(rbind(obs_div0[,c("SITE_CODE", "plot", "species", "group")],
+                       obs_div1[,c("SITE_CODE", "plot", "species", "group")]))
+obs_div_merged1 = obs_div_merged0 = obs_div
+obs_div_merged0$cover_resurvey_diff = obs_div_merged0$cover_resurvey_same = obs_div_merged0$cover = NA
+obs_div_merged1$cover_resurvey_diff = obs_div_merged1$cover_resurvey_same = obs_div_merged1$cover = NA
+
+ps = match(paste(obs_div_merged0$SITE_CODE, obs_div_merged0$plot, obs_div_merged0$species, obs_div_merged0$group),
+           paste(obs_div0$SITE_CODE, obs_div0$plot, obs_div0$species, obs_div0$group))
+obs_div_merged0$cover = obs_div0$cover[ps]
+obs_div_merged0$cover_resurvey_same = obs_div0$cover_resurvey_same[ps]
+obs_div_merged0$cover_resurvey_diff = obs_div0$cover_resurvey_diff[ps]
+obs_div_merged0[is.na(obs_div_merged0)] = 0
+
+ps = match(paste(obs_div_merged1$SITE_CODE, obs_div_merged1$plot, obs_div_merged1$species, obs_div_merged1$group),
+           paste(obs_div1$SITE_CODE, obs_div1$plot, obs_div1$species, obs_div1$group))
+obs_div_merged1$cover = obs_div1$cover[ps]
+obs_div_merged1$cover_resurvey_same = obs_div1$cover_resurvey_same[ps]
+obs_div_merged1$cover_resurvey_diff = obs_div1$cover_resurvey_diff[ps]
+obs_div_merged1[is.na(obs_div_merged1)] = 0
+
+# get likelihoods
+obs_div_same0 = get_pq_est(obs_div_merged0, type = "same")
+obs_div_diff0 = get_pq_est(obs_div_merged0, type = "diff")
+obs_div_same1 = get_pq_est(obs_div_merged1, type = "same")
+obs_div_diff1 = get_pq_est(obs_div_merged1, type = "diff")
+
+## Next, fix beta diversity estimates
+p_lose = abs(pmin(deltaS,0))/sum(!is.na(obs_div_same0$cover) & obs_div_same0$cover>0)
+
+# losses
+sps = 3 # 3 is obs error, 6 is lost
+pi = obs_div_diff0$pi[sps]
+qi = obs_div_diff0$qi[sps]
+obs_div_diff0$cover[sps]
+(1-pi)*p_lose # 1 found and 2 was lost
+(1-pi)*pi # 1 found and 2 was missed or misided
+
+(1-pi)*pi*qi # 1 found and 2 missed
+(1-pi)*pi*(1-qi) # 1 found and 2 mis-ided
+
+# mis-ids
