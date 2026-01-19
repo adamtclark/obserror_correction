@@ -51,8 +51,18 @@ divdat = d[,c("SITE_CODE", "plot", "species", "cover", "group")]
 divdat = divdat[!is.na(divdat$cover) & divdat$cover!=0,]
 
 # simulate diversity change
-simulate_change = function(divdat, deltaS = -1) {
+simulate_change = function(divdat, deltaS = -1, process_noise = TRUE) {
   divdat_new = divdat
+  
+  # Add process noise following Taylor Power Law
+  a = 0.01 # intercept
+  b = 1.2  # scaling exponent
+  
+  if(process_noise) {
+    proc_noise_sd = sqrt(a*divdat_new$cover^b)
+    #plot(divdat_new$cover, proc_noise_sd); abline(a=0,b=0.1,lty=2)
+    divdat_new$cover = pmin(abs(rnorm(nrow(divdat_new), mean = divdat_new$cover, sd = proc_noise_sd)),1)
+  }
   
   if(deltaS==0) {
     return(divdat_new)
@@ -70,8 +80,12 @@ simulate_change = function(divdat, deltaS = -1) {
       if(deltaS<0) { # species loss
         if(S_target > 0) {
           while(S != S_target) {
-            rnd = sample(x = which(dtmp$cover>0), size = 1)
-            dtmp$cover[rnd] = pmax(dtmp$cover[rnd] + dS_percent,0)
+            #rnd = sample(x = which(dtmp$cover>0), size = 1)
+            #dtmp$cover[rnd] = pmax(dtmp$cover[rnd] + dS_percent,0)
+            
+            rnd = sample(which(dtmp$cover > 0),1)
+            dtmp$cover[rnd] = pmin(pmax(rnorm(1, dtmp$cover[rnd], sqrt(a*dtmp$cover[rnd]^b)),0),1)
+            
             if(dtmp$cover[rnd] == 0) {
               S = S-1
             }
@@ -426,7 +440,19 @@ plot_delta_function = function(simout, dobs, colu = 1, ylim=c(-1,1), doplot=TRUE
         col = adjustcolor(colu,alpha.f = alpha_level))
 }
 
-pdf("figures/diversity_change.pdf", width = 5, height = 6)
+annotate_plot = function(xlm = c(-10, 10), ylm = c(-0.14, 0.14)) {
+  text(xlm[1], ylm[2], "underestimate species loss", cex = 0.8, pos = 4)
+  text(xlm[2], ylm[1], "underestimate species gain", cex = 0.8, pos = 2)
+  text(xlm[1], ylm[1], "overestimate species loss", cex = 0.8, pos = 4)
+  text(xlm[2], ylm[2], "overestimate species gain", cex = 0.8, pos = 2)
+}
+
+annotate_plot2 = function(xlm = c(-10, 10), ylm = c(-0.04, 0.14)) {
+  text(xlm[2], ylm[2], "overestimate turnover", cex = 0.8, pos = 2)
+  text(xlm[2], ylm[1], "underestimate turnover", cex = 0.8, pos = 2)
+}
+
+pdf("figures/diversity_change.pdf", width = 7, height = 6)
 #png("figures/diversity_change.png", width = 5, height = 6, units = "in", res = 200)
 
 par(mfrow = c(3,2), mar=c(2,2,1.5,1), oma = c(2,2,0,0))
@@ -438,6 +464,7 @@ lm_beta = c(-0.05, 0.15)
 dtrue = (simout_rich$alpha_2_true-simout_rich$alpha_1_true)
 dobs_same = ((simout_rich$alpha_2_same-simout_rich$alpha_1_same)-dtrue)/simout_rich$alpha_1_same
 plot_delta_function(simout = simout_rich,dobs = dobs_same, ylim = lm_alpha, colu = collst[3])
+annotate_plot()
 
 dobs_diff = ((simout_rich$alpha_2_diff-simout_rich$alpha_1_diff)-dtrue)/simout_rich$alpha_1_diff
 plot_delta_function(simout = simout_rich,dobs = dobs_diff,ylim=lm_alpha, doplot = FALSE, colu = collst[4])
@@ -446,6 +473,7 @@ title("A. Richness, alpha", adj = 0)
 dtrue = (simout_rich$beta_true)
 dobs_same = (simout_rich$beta_same)-dtrue
 plot_delta_function(simout = simout_rich,dobs = dobs_same, ylim = lm_beta, colu = collst[3])
+annotate_plot2()
 
 dobs_diff = (simout_rich$beta_different)-dtrue
 plot_delta_function(simout = simout_rich,dobs = dobs_diff, ylim = lm_beta, colu = collst[4], doplot = FALSE)
@@ -455,6 +483,7 @@ title("D. Richness, beta", adj = 0)
 dtrue = (simout_shannon$alpha_2_true-simout_shannon$alpha_1_true)
 dobs_same = ((simout_shannon$alpha_2_same-simout_shannon$alpha_1_same)-dtrue)/simout_shannon$alpha_1_same
 plot_delta_function(simout = simout_shannon,dobs = dobs_same, ylim = lm_alpha, colu = collst[3])
+annotate_plot()
 
 dobs_diff = ((simout_shannon$alpha_2_diff-simout_shannon$alpha_1_diff)-dtrue)/simout_shannon$alpha_1_diff
 plot_delta_function(simout = simout_shannon,dobs = dobs_diff,ylim=lm_alpha, colu = collst[4], doplot = FALSE)
@@ -463,6 +492,7 @@ title("B. Shannon, alpha", adj = 0)
 dtrue = (simout_shannon$beta_true)
 dobs_same = (simout_shannon$beta_same)-dtrue
 plot_delta_function(simout = simout_shannon,dobs = dobs_same, ylim = lm_beta, colu = collst[3])
+annotate_plot2()
 
 dobs_diff = (simout_shannon$beta_different)-dtrue
 plot_delta_function(simout = simout_shannon,dobs = dobs_diff, ylim = lm_beta, colu = collst[4], doplot = FALSE)
@@ -472,6 +502,7 @@ title("E. Shannon, beta", adj = 0)
 dtrue = (simout_simpson$alpha_2_true-simout_simpson$alpha_1_true)
 dobs_same = ((simout_simpson$alpha_2_same-simout_simpson$alpha_1_same)-dtrue)/simout_simpson$alpha_1_same
 plot_delta_function(simout = simout_simpson,dobs = dobs_same, ylim = lm_alpha, colu = collst[3])
+annotate_plot()
 
 dobs_diff = ((simout_simpson$alpha_2_diff-simout_simpson$alpha_1_diff)-dtrue)/simout_simpson$alpha_1_diff
 plot_delta_function(simout = simout_simpson,dobs = dobs_diff,ylim=lm_alpha, colu = collst[4], doplot = FALSE)
@@ -480,6 +511,7 @@ title("C. Simpson, alpha", adj = 0)
 dtrue = (simout_simpson$beta_true)
 dobs_same = (simout_simpson$beta_same)-dtrue
 plot_delta_function(simout = simout_simpson,dobs = dobs_same, ylim = lm_beta, colu = collst[3])
+annotate_plot2()
 
 dobs_diff = (simout_simpson$beta_different)-dtrue
 plot_delta_function(simout = simout_simpson,dobs = dobs_diff, ylim = lm_beta, colu = collst[4], doplot = FALSE)
