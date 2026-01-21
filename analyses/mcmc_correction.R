@@ -17,7 +17,7 @@ lwduse = 1.5
 # parameters
 a = 0.05 # intercept
 b = 1.2  # scaling exponent
-pimm = 0.2 # probability of immigration
+pimm = 0.1 # probability of immigration
 
 ### now try MCMC fitting example
 set.seed(23432)
@@ -87,11 +87,11 @@ obs_div_merged1$cover_resurvey_diff = obs_div1$cover_resurvey_diff[ps]
 obs_div_merged1[is.na(obs_div_merged1)] = 0
 
 # get likelihoods
-true_cover_diff0 = obs_div_merged0$cover
-tmpps = true_cover_diff0==0 & obs_div_merged0$cover_resurvey_diff != 0
-true_cover_diff0[tmpps] = obs_div_merged0$cover_resurvey_diff[tmpps]
+true_cover_diff = (obs_div_merged0$cover+obs_div_merged1$cover)/((obs_div_merged0$cover>0) + (obs_div_merged1$cover>0))
+#tmpps = true_cover_diff0==0 & obs_div_merged0$cover_resurvey_diff != 0
+#true_cover_diff0[tmpps] = obs_div_merged0$cover_resurvey_diff[tmpps]
 obs_div_same0 = get_pq_est(obs_div_merged0, type = "same", true_covers = obs_div_merged0$cover)
-obs_div_diff0 = get_pq_est(obs_div_merged0, type = "diff", true_covers = true_cover_diff0)
+obs_div_diff0 = get_pq_est(obs_div_merged0, type = "diff", true_covers = true_cover_diff)
 obs_div_same1 = get_pq_est(obs_div_merged1, type = "same", true_covers = obs_div_merged1$cover)
 obs_div_diff1 = get_pq_est(obs_div_merged1, type = "diff", true_covers = obs_div_merged1$cover)
 
@@ -119,23 +119,82 @@ obs_div_diff0$cover[sps]
 
 
 #################################################
-# Let's start easy: case with deltaS = 0
-p_lose = pnorm(0, obs_div_diff0$cover, sqrt(a*obs_div_diff0$cover^b))
+# Let's start easy - just use real data
+p_lose = pnorm(0, true_cover_diff, sqrt(a*true_cover_diff^b))
 
-# misid's are more likely than extinctions?
-ps = which(obs_div_diff0$cover_resurvey_diff==0 & obs_div_diff0$cover != 0)
-obs_div_diff0$pi[ps] # missed or misided
-p_lose[ps]
+transition_type = data.frame(
+  both_found = obs_div_diff0$cover>0 & obs_div_diff1$cover>0,
+  extinction = obs_div_diff0$cover>0 & obs_div_diff1$cover==0,
+  immigration = obs_div_diff0$cover==0 & obs_div_diff1$cover>0
+  )
+#transition_type$extinction[10] = TRUE
+#transition_type$both_found[10] = FALSE
+sum(2*log(1-obs_div_diff0$pi[transition_type$both_found])) + # both found
+      sum(log(1-obs_div_diff0$pi[transition_type$extinction]) + log(p_lose[transition_type$extinction])) + #1 found and 2 lots
+      sum(log(1-obs_div_diff0$pi[transition_type$immigration])+log(dbinom(sum(transition_type$immigration),S-N,pimm))) # immigration and found
 
-# misid's vs. immigration?
-ps = which(obs_div_diff0$cover_resurvey_diff!=0 & obs_div_diff0$cover == 0)
-obs_div_diff0[ps,]$pi*obs_div_diff0[ps,]$qi
+############### Now let's make it harder - observed data
+# create estimated true community state
+true_cover_est = (obs_div_merged0$cover_resurvey_diff+obs_div_merged1$cover_resurvey_diff)/((obs_div_merged0$cover_resurvey_diff>0) + (obs_div_merged1$cover_resurvey_diff>0))
 
-obs_div_diff0$cover_resurvey_diff[ps]
-#hist(quantile(td, probs = runif(1e3), type = 4))
+obs_div_diff0 = get_pq_est(obs_div_merged0, type = "diff", true_covers = true_cover_est)
+obs_div_diff1 = get_pq_est(obs_div_merged1, type = "diff", true_covers = true_cover_est)
+
+true_pa_est = data.frame(species = obs_div_diff0$species,
+                      obs0 = 0,
+                      obs1 = 0)
+true_pa_est$obs0[obs_div_diff0$cover>0] = 1
+true_pa_est$obs1[obs_div_diff1$cover>0] = 1
+
+obs_cover = data.frame(obs0 = obs_div_merged0$cover_resurvey_diff, obs1 = obs_div_merged1$cover_resurvey_diff)
+p_lose = pnorm(0, true_cover_est, sqrt(a*true_cover_est^b))
+true_pa_est[true_pa_est$obs0!=1 | true_pa_est$obs1!=1,]
 
 
+# calculate LL
+LL = 0
 
+## colonizations and extinctions from "true" states
+# extinction
+LL = LL + sum(log(p_lose[true_pa_est$obs0==1 & true_pa_est$obs1==0]))
+LL = LL + sum(log(1-p_lose[true_pa_est$obs0==1 & true_pa_est$obs1==1]))
+
+# colonisation
+ncol = sum(true_pa_est$obs0==0 & true_pa_est$obs1==1)
+LL = LL + pbinom(ncol, S-N, pimm, lower.tail = FALSE, log.p = TRUE)
+
+# 1 obs - 1 true observations
+ps = true_pa_est$obs0==1 & obs_cover$obs0>0
+LL = LL + sum(log((1-obs_div_diff0$pi[ps])))
+
+ps = true_pa_est$obs1==1 & obs_cover$obs1>0
+LL = LL + sum(log((1-obs_div_diff1$pi[ps])))
+
+
+########### TODO - working from here
+# 1 obs - 0 true observations (misID)
+ps_misID = true_pa_est$obs0==0 & obs_cover$obs0>0
+true_pa_est[ps,]
+
+# 0 obs - 1 true observations (missed)
+ps_miss = true_pa_est$obs0==1 & obs_cover$obs0==0
+
+# for every misID, choose whether to associate to a missed
+## WITHIN obs0/true0
+# would need to link an obs > 0 / true == 0 TO an obs == 0 / true > 0
+# NOTE that obs1/true1 has already been accounted for above.
+# TO DO THIS: misID = p*(1-q)
+## IF misID0 and miss1, THEN p*(1-q)*p*(q) (across both lines)
+## IF misID0 and correct1, THEN ignore additional p*q on case with obs0/true1
+##### OH! Basically, just determines whether we multiply by p(1-q) or by pq
+## TO DO: think
+# in case where obs1 misses the misided species, then no entry for real species exists (an no observation)
+# do we need to add in a line for this?...
+
+data.frame(true_pa_est, obs_cover)[ps_misID | ps_miss,]
+
+
+# 0-0
 
 
 
@@ -159,7 +218,7 @@ axis(1, at = c(0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1), las = 2
 box()
 mtext("Species-level cover", 1, line = 3.5)
 mtext("Prob. local extinction", 2, line = 2.5)
-
+abline(h=c(0,1), lty=3)
 
 # colonization probability vs. N and S
 # extinction probability vs. abundance
@@ -173,14 +232,16 @@ plot(Nsq, prob_imm, type = "s",
      xaxs = "i", axes = FALSE,
      lwd = 1.5,
      xlim=c(0,S+1),
+     ylim = c(0,1),
      xlab = "",
      ylab = "")
 axis(2)
 axis(1, at = seq(0,S+1, by=2), las = 2)
 box()
 mtext("Plot-level richness", 1, line = 3.2)
-mtext("Prob. ≥1 immigrant", 2, line = 2.5)
-
+mtext("Prob. ≥1 immigration", 2, line = 2.5)
+abline(h=c(0,1), lty=3)
+abline(v=c(N,S), lty=2)
 
 # note: these are equal
 #pbinom(0,3,pimm,lower.tail = FALSE)
@@ -191,9 +252,26 @@ mtext("Prob. ≥1 immigrant", 2, line = 2.5)
 
 
 
+
+
 ###### old
 
 if(FALSE) {
+  #case with deltaS = 0
+  p_lose = pnorm(0, obs_div_diff0$cover, sqrt(a*obs_div_diff0$cover^b))
+  
+  # misid's are more likely than extinctions?
+  ps = which(obs_div_diff0$cover_resurvey_diff==0 & obs_div_diff0$cover != 0)
+  obs_div_diff0$pi[ps] # missed or misided
+  p_lose[ps]
+  
+  # misid's vs. immigration?
+  ps = which(obs_div_diff0$cover_resurvey_diff!=0 & obs_div_diff0$cover == 0)
+  obs_div_diff0[ps,]$pi*obs_div_diff0[ps,]$qi
+  
+  obs_div_diff0$cover_resurvey_diff[ps]
+  #hist(quantile(td, probs = runif(1e3), type = 4))
+  
   # simulate change
   divdat_small = divdat[divdat$SITE_CODE=="kzbg.at.dragnet",]
   divdat_small_new = simulate_change(divdat_small, deltaS = 3)
