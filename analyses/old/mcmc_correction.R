@@ -1,3 +1,8 @@
+#### TODO:
+# clean up
+# iterate across all plots?
+
+
 setwd("~/Dropbox/Projects/117_ObservationError/src")
 rm(list = ls())
 #source("util/save_model_outputs.R")
@@ -201,6 +206,8 @@ for(i in 1:niter) {
   if(sum(ps_misID0)<=sum(ps_miss0)) {
     misID_match0 = sample(which(ps_miss0),sum(ps_misID0))
   } else {
+    # THINK ABOUT THIS - maybe add in extra species?
+    
     delta_misID0 = sum(ps_misID0)-sum(ps_miss0)
     misID_match0 = sample(which(ps_miss0),sum(ps_miss0))
     # delta_misID0 is number of misid's species that were missed by other surveyor
