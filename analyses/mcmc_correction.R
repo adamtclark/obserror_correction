@@ -32,8 +32,8 @@ true_div1 = true_div0 = divdat[divdat$SITE_CODE=="kzbg.at.dragnet" & divdat$plot
 p_lose = pnorm(0, true_div0$cover, sqrt(a*true_div0$cover^b))
 cover_new = rnorm(nrow(true_div0), true_div0$cover, sqrt(a*true_div0$cover^b))
 cover_new[cover_new<=0] = 0
-cover_new[cover_new>0.01] = round(cover_new[cover_new>0.01],2)
-cover_new[cover_new>0 & cover_new <= 0.01] = 0.01
+#cover_new[cover_new>0.01] = round(cover_new[cover_new>0.01],2)
+#cover_new[cover_new>0 & cover_new <= 0.01] = 0.01
 true_div1$cover = cover_new
 
 # add species
@@ -55,17 +55,14 @@ true_div1 = rbind(true_div1,
                              cover = new_species$cover[imm_ps],
                              group = new_species$group[imm_ps]))
 
-# get immigration likelihood
+# update immigration table
+new_species = new_species[!new_species$species%in%true_div1$species,]
+S = sum(new_species$cover>0)+N
+
+# merge
 obs_div0 = simulate_noise(divdat = true_div0)
 obs_div1 = simulate_noise(divdat = true_div1)
 
-# check diversity estimates
-beta_test = get_beta(obs_div0, obs_div1)
-beta_test[,grep("beta", names(beta_test))]
-
-## run MCMC routine
-
-# merge
 obs_div = unique(rbind(obs_div0[,c("SITE_CODE", "plot", "species", "group")],
                        obs_div1[,c("SITE_CODE", "plot", "species", "group")]))
 obs_div_merged1 = obs_div_merged0 = obs_div
@@ -86,141 +83,229 @@ obs_div_merged1$cover_resurvey_same = obs_div1$cover_resurvey_same[ps]
 obs_div_merged1$cover_resurvey_diff = obs_div1$cover_resurvey_diff[ps]
 obs_div_merged1[is.na(obs_div_merged1)] = 0
 
+# add in missing species from region
+obs_div_merged0 = rbind(obs_div_merged0,
+              data.frame(SITE_CODE = "kzbg.at.dragnet",
+                         plot = 99,
+                         species = new_species$species,
+                         group = new_species$group,
+                         cover = new_species$cover,
+                         cover_resurvey_same = 0,
+                         cover_resurvey_diff=0))
+
+obs_div_merged1 = rbind(obs_div_merged1,
+                        data.frame(SITE_CODE = "kzbg.at.dragnet",
+                                   plot = 99,
+                                   species = new_species$species,
+                                   group = new_species$group,
+                                   cover = new_species$cover,
+                                   cover_resurvey_same = 0,
+                                   cover_resurvey_diff=0))
+
 # get likelihoods
-true_cover_diff = (obs_div_merged0$cover+obs_div_merged1$cover)/((obs_div_merged0$cover>0) + (obs_div_merged1$cover>0))
+#true_cover_diff = (obs_div_merged0$cover+obs_div_merged1$cover)/((obs_div_merged0$cover>0) + (obs_div_merged1$cover>0))
 #tmpps = true_cover_diff0==0 & obs_div_merged0$cover_resurvey_diff != 0
 #true_cover_diff0[tmpps] = obs_div_merged0$cover_resurvey_diff[tmpps]
-obs_div_same0 = get_pq_est(obs_div_merged0, type = "same", true_covers = obs_div_merged0$cover)
-obs_div_diff0 = get_pq_est(obs_div_merged0, type = "diff", true_covers = true_cover_diff)
-obs_div_same1 = get_pq_est(obs_div_merged1, type = "same", true_covers = obs_div_merged1$cover)
-obs_div_diff1 = get_pq_est(obs_div_merged1, type = "diff", true_covers = obs_div_merged1$cover)
+
+#obs_div_same0 = get_pq_est(obs_div_merged0, type = "same")#, true_covers = obs_div_merged0$cover)
+#obs_div_diff0 = get_pq_est(obs_div_merged0, type = "diff")#, true_covers = obs_div_merged0$cover)
+#obs_div_same1 = get_pq_est(obs_div_merged1, type = "same")#, true_covers = obs_div_merged1$cover)
+#obs_div_diff1 = get_pq_est(obs_div_merged1, type = "diff")#, true_covers = obs_div_merged1$cover)
 
 ## Next, fix beta diversity estimates
 #abs(pmin(deltaS,0))/sum(!is.na(obs_div_same0$cover) & obs_div_same0$cover>0)
 
-# losses
-sps = 12 # 3 is obs error, 6 is lost
-obs_div_diff0[sps,]
-pi = obs_div_diff0$pi[sps]
-qi = obs_div_diff0$qi[sps]
-obs_div_diff0$cover[sps]
-(1-pi)*p_lose # 1 found and 2 was lost
-(1-pi)*pi # 1 found and 2 was missed or misided
-
-(1-pi)*pi*qi # 1 found and 2 missed
-(1-pi)*pi*(1-qi) # 1 found and 2 mis-ided
-
-# mis-ids
-
-
-
-
-
-
-
-#################################################
-# Let's start easy - just use real data
-p_lose = pnorm(0, true_cover_diff, sqrt(a*true_cover_diff^b))
-
-transition_type = data.frame(
-  both_found = obs_div_diff0$cover>0 & obs_div_diff1$cover>0,
-  extinction = obs_div_diff0$cover>0 & obs_div_diff1$cover==0,
-  immigration = obs_div_diff0$cover==0 & obs_div_diff1$cover>0
-  )
-#transition_type$extinction[10] = TRUE
-#transition_type$both_found[10] = FALSE
-sum(2*log(1-obs_div_diff0$pi[transition_type$both_found])) + # both found
-      sum(log(1-obs_div_diff0$pi[transition_type$extinction]) + log(p_lose[transition_type$extinction])) + #1 found and 2 lots
-      sum(log(1-obs_div_diff0$pi[transition_type$immigration])+log(dbinom(sum(transition_type$immigration),S-N,pimm))) # immigration and found
 
 ############### Now let's make it harder - observed data
 # create estimated true community state
-true_cover_est = (obs_div_merged0$cover_resurvey_diff+obs_div_merged1$cover_resurvey_diff)/((obs_div_merged0$cover_resurvey_diff>0) + (obs_div_merged1$cover_resurvey_diff>0))
+#true_cover_est = (obs_div_merged0$cover_resurvey_diff+obs_div_merged1$cover_resurvey_diff)/pmax(1,((obs_div_merged0$cover_resurvey_diff>0) + (obs_div_merged1$cover_resurvey_diff>0)))
+true_cover_est0 = obs_div_merged0$cover_resurvey_diff
+true_cover_est0[true_cover_est0==0] = obs_div_merged1$cover_resurvey_diff[true_cover_est0==0]
+true_cover_est0[true_cover_est0==0] = obs_div_merged0$cover[true_cover_est0==0]
 
-obs_div_diff0 = get_pq_est(obs_div_merged0, type = "diff", true_covers = true_cover_est)
-obs_div_diff1 = get_pq_est(obs_div_merged1, type = "diff", true_covers = true_cover_est)
+true_cover_est1 = obs_div_merged1$cover_resurvey_diff
+true_cover_est1[true_cover_est1==0] = obs_div_merged0$cover_resurvey_diff[true_cover_est1==0]
+true_cover_est1[true_cover_est1==0] = obs_div_merged1$cover[true_cover_est1==0]
 
-true_pa_est = data.frame(species = obs_div_diff0$species,
-                      obs0 = 0,
-                      obs1 = 0)
-true_pa_est$obs0[obs_div_diff0$cover>0] = 1
-true_pa_est$obs1[obs_div_diff1$cover>0] = 1
+obs_div_diff0 = get_pq_est(obs_div_merged0, type = "diff", true_covers = true_cover_est0)
+obs_div_diff1 = get_pq_est(obs_div_merged1, type = "diff", true_covers = true_cover_est1)
 
 obs_cover = data.frame(obs0 = obs_div_merged0$cover_resurvey_diff, obs1 = obs_div_merged1$cover_resurvey_diff)
-p_lose = pnorm(0, true_cover_est, sqrt(a*true_cover_est^b))
+p_lose = pnorm(0, true_cover_est0, sqrt(a*true_cover_est0^b))
 
 
 ### Run MCMC
-true_pa_est[true_pa_est$obs0!=1 | true_pa_est$obs1!=1,]
-
-
+# initialize true_pa_est
+true_pa_est = data.frame(species = obs_div_diff0$species,
+                         obs0 = 0,
+                         obs1 = 0)
+#true_pa_est$obs0[obs_div_diff0$cover>0] = 1
+#true_pa_est$obs1[obs_div_diff1$cover>0] = 1
+true_pa_est$obs0[obs_div_diff0$cover_resurvey_diff>0] = 1
+true_pa_est$obs1[obs_div_diff1$cover_resurvey_diff>0] = 1
 
 true_pa_est0 = true_pa_est
+LL0 = -Inf
+delta_misID0_0 = 0
+delta_misID1_0 = 0
 
+niter = 1e4
+true_pa_est_out = array(dim = c(nrow(true_pa_est),2, niter))
+LL_out = numeric(niter)
+delta_misID0_out = numeric(niter)
+delta_misID1_out = numeric(niter)
 
-#true_pa_est=true_pa_est0
-#true_pa_est[7,2] = 1
-
-# calculate LL
-LL = 0
-delta_misID0 = 0
-delta_misID1 = 0
-
-## colonizations and extinctions from "true" states
-# extinction
-LL = LL + sum(log(p_lose[true_pa_est$obs0==1 & true_pa_est$obs1==0]))
-LL = LL + sum(log(1-p_lose[true_pa_est$obs0==1 & true_pa_est$obs1==1]))
-
-# colonisation
-ncol = sum(true_pa_est$obs0==0 & true_pa_est$obs1==1)
-LL = LL + pbinom(ncol, S-N, pimm, lower.tail = FALSE, log.p = TRUE)
-
-# 1 obs - 1 true observations
-ps = true_pa_est$obs0==1 & obs_cover$obs0>0
-LL = LL + sum(log((1-obs_div_diff0$pi[ps])))
-
-ps = true_pa_est$obs1==1 & obs_cover$obs1>0
-LL = LL + sum(log((1-obs_div_diff1$pi[ps])))
-
-# 0 obs - 1 true observations (misID)
-ps_misID0 = true_pa_est$obs0==0 & obs_cover$obs0>0
-LL = LL + sum(log(obs_div_diff0$pi[ps_misID0]*(1-obs_div_diff0$qi[ps_misID0])))
-
-ps_misID1 = true_pa_est$obs1==0 & obs_cover$obs1>0
-LL = LL + sum(log(obs_div_diff1$pi[ps_misID1]*(1-obs_div_diff1$qi[ps_misID1])))
-
-# 0 obs - 1 true observations (missed)
-ps_miss0 = true_pa_est$obs0==1 & obs_cover$obs0==0
-if(sum(ps_misID0)<=sum(ps_miss0)) {
-  misID_match0 = sample(which(ps_miss0),sum(ps_misID0))
-} else {
-  delta_misID0 = sum(ps_misID0)-sum(ps_miss0)
-  misID_match0 = sample(which(ps_miss0),sum(ps_miss0))
-  # delta_misID0 is number of misid's species that were missed by other surveyor
-  misID_nomatch0 = sample(which(ps_misID0),delta_misID0)
-  LL = LL + sum(log(obs_div_diff0$pi[misID_nomatch0]*obs_div_diff0$qi[misID_nomatch0])) # extra missed species
-}
-ps_miss0[misID_match0] = FALSE
-LL = LL + sum(log(obs_div_diff0$pi[ps_miss0]*obs_div_diff0$qi[ps_miss0]))
-
+alpha_out = matrix(nrow=niter, ncol = 2)
+gamma_out = numeric(niter)
+beta_out = numeric(niter)
+i=1
+for(i in 1:niter) {
+  # propose new true_pa_est
+  true_pa_est = true_pa_est0
+  delta_misID0 = 0
+  delta_misID1 = 0
+  #data.frame(true_pa_est,obs_cover)
   
-ps_miss1 = true_pa_est$obs1==1 & obs_cover$obs0==1
-if(sum(ps_misID1)<=sum(ps_miss1)) {
-  misID_match1 = sample(which(ps_miss1),sum(ps_misID1))
-} else {
-  delta_misID1 = sum(ps_misID1)-sum(ps_miss1)
-  misID_match1 = sample(which(ps_miss1),sum(ps_miss1))
-  # delta_misID1 is number of misid's species that were missed by other surveyor
-  misID_nomatch1 = sample(which(ps_misID1),delta_misID1)
-  LL = LL + sum(log(obs_div_diff1$pi[misID_nomatch1]*obs_div_diff1$qi[misID_nomatch1])) # extra missed species
+  rowps = sample(1:nrow(true_pa_est),1)
+  colps = sample(2:3,1)
+  true_pa_est[rowps,colps] = abs(true_pa_est[rowps,colps]-1)
+  
+  # calculate LL
+  LL = 0
+  
+  ## colonizations and extinctions from "true" states
+  # extinction
+  LL = LL + sum(log(p_lose[true_pa_est$obs0==1 & true_pa_est$obs1==0]))
+  LL = LL + sum(log(1-p_lose[true_pa_est$obs0==1 & true_pa_est$obs1==1]))
+  
+  # colonisation
+  ncol = sum(true_pa_est$obs0==0 & true_pa_est$obs1==1)
+  LL = LL + pbinom(ncol, S-N, pimm, lower.tail = FALSE, log.p = TRUE)
+  
+  # 1 obs - 1 true observations
+  ps = true_pa_est$obs0==1 & obs_cover$obs0>0
+  LL = LL + sum(log((1-obs_div_diff0$pi[ps])))
+  
+  ps = true_pa_est$obs1==1 & obs_cover$obs1>0
+  LL = LL + sum(log((1-obs_div_diff1$pi[ps])))
+  
+  # 0 obs - 1 true observations (misID)
+  ps_misID0 = true_pa_est$obs0==0 & obs_cover$obs0>0
+  LL = LL + sum(log(obs_div_diff0$pi[ps_misID0]*(1-obs_div_diff0$qi[ps_misID0])))
+  
+  ps_misID1 = true_pa_est$obs1==0 & obs_cover$obs1>0
+  LL = LL + sum(log(obs_div_diff1$pi[ps_misID1]*(1-obs_div_diff1$qi[ps_misID1])))
+  
+  # 0 obs - 1 true observations (missed)
+  ps_miss0 = true_pa_est$obs0==1 & obs_cover$obs0==0
+  if(sum(ps_misID0)<=sum(ps_miss0)) {
+    misID_match0 = sample(which(ps_miss0),sum(ps_misID0))
+  } else {
+    delta_misID0 = sum(ps_misID0)-sum(ps_miss0)
+    misID_match0 = sample(which(ps_miss0),sum(ps_miss0))
+    # delta_misID0 is number of misid's species that were missed by other surveyor
+    misID_nomatch0 = sample(which(ps_misID0),delta_misID0)
+    LL = LL + sum(log(obs_div_diff0$pi[misID_nomatch0]*obs_div_diff0$qi[misID_nomatch0])) # extra missed species
+  }
+  ps_miss0[misID_match0] = FALSE
+  LL = LL + sum(log(obs_div_diff0$pi[ps_miss0]*obs_div_diff0$qi[ps_miss0]))
+  
+  ps_miss1 = true_pa_est$obs1==1 & obs_cover$obs1==0
+  if(sum(ps_misID1)<=sum(ps_miss1)) {
+    misID_match1 = sample(which(ps_miss1),sum(ps_misID1))
+  } else {
+    delta_misID1 = sum(ps_misID1)-sum(ps_miss1)
+    misID_match1 = sample(which(ps_miss1),sum(ps_miss1))
+    # delta_misID1 is number of misid's species that were missed by other surveyor
+    misID_nomatch1 = sample(which(ps_misID1),delta_misID1)
+    LL = LL + sum(log(obs_div_diff1$pi[misID_nomatch1]*obs_div_diff1$qi[misID_nomatch1])) # extra missed species
+  }
+  ps_miss1[misID_match1] = FALSE
+  LL = LL + sum(log(obs_div_diff1$pi[ps_miss1]*obs_div_diff1$qi[ps_miss1]))
+  
+  if(log(runif(1)) < LL-LL0) {
+  #if(LL > LL0) {
+    # accept proposition
+    true_pa_est0 = true_pa_est
+    LL0 = LL
+    delta_misID0_0 = delta_misID0
+    delta_misID1_0 = delta_misID1
+  }
+  
+  # store output
+  true_pa_est_out[,,i] = as.matrix(true_pa_est0[,-1])
+  LL_out[i] = LL0
+  delta_misID0_out[i] = delta_misID0_0
+  delta_misID1_out[i] = delta_misID1_0
+  
+  # calculate alpha and turnover
+  alpha = colSums(true_pa_est0[,-1]>0)
+  gamma = sum(rowSums(true_pa_est0[,-1])>0)
+  beta = gamma/mean(alpha)
+  alpha_out[i,] = alpha
+  gamma_out[i] = gamma
+  beta_out[i] = beta
+  
+  if(i/10 == floor(i/10))
+    round(print(i/niter),2)
 }
-ps_miss1[misID_match1] = FALSE
-LL = LL + sum(log(obs_div_diff1$pi[ps_miss1]*obs_div_diff1$qi[ps_miss1]))
-
-LL
 
 
+plot(LL_out, type = "l")
 
+burnin = niter/4
+
+alpha0_true = sum(true_div0$cover>0)
+plot(alpha_out[-c(1:burnin),1], col = "red")
+abline(h = alpha0_true, col = "red", lty=2, lwd = 2)
+abline(h = sum(obs_div_diff0$cover_resurvey_diff>0), col = "red", lty=3, lwd = 2)
+
+alpha1_true = sum(true_div1$cover>0)
+plot(alpha_out[-c(1:burnin),2], col = "blue")
+abline(h = alpha1_true, col = "blue", lty=2, lwd = 2)
+abline(h = sum(obs_div_diff1$cover_resurvey_diff>0), col = "blue", lty=3, lwd = 2)
+
+gamma_true = length(unique(true_div0$species, true_div1$species))
+plot(gamma_out[-c(1:burnin)], col = "purple")
+abline(h = gamma_true, col = "purple", lty=2, lwd = 2)
+abline(h = sum((obs_div_diff0$cover_resurvey_diff+obs_div_diff1$cover_resurvey_diff)>0), col = "purple", lty=3, lwd = 2)
+
+plot(delta_misID0_out[-c(1:burnin)], col = "black")
+plot(delta_misID1_out[-c(1:burnin)], col = "black")
+
+
+plot(beta_out[-c(1:burnin)], col = "grey")
+abline(h = gamma_true/mean(c(alpha0_true, alpha1_true)),
+       col = "black", lty=2, lwd = 2)
+abline(h = sum((obs_div_diff0$cover_resurvey_diff+obs_div_diff1$cover_resurvey_diff)>0)/((sum(obs_div_diff0$cover_resurvey_diff>0)+sum(obs_div_diff1$cover_resurvey_diff>0))/2),
+       col = "black", lty=3, lwd = 2)
+
+hist(beta_out[-c(1:burnin)], col = "grey")
+abline(v = sum((obs_div_diff0$cover+obs_div_diff1$cover)>0)/((sum(obs_div_diff0$cover>0)+sum(obs_div_diff1$cover>0))/2),
+       col = "black", lty=2, lwd = 2)
+abline(v = sum((obs_div_diff0$cover_resurvey_diff+obs_div_diff1$cover_resurvey_diff)>0)/((sum(obs_div_diff0$cover_resurvey_diff>0)+sum(obs_div_diff1$cover_resurvey_diff>0))/2),
+       col = "black", lty=3, lwd = 2)
+abline(v= mean(beta_out[-c(1:burnin)]), lwd = 2)
+
+# delta_misID0_out??
+# too many species predicted for period 1
+
+
+
+data.frame(species = obs_div_diff0$species,
+           apply(true_pa_est_out[,,-c(1:burnin)], 1:2, mean),
+           realcover0 = obs_div_diff0$cover*(obs_div_diff0$species %in% true_div0$species),
+           realcover1 = obs_div_diff1$cover*(obs_div_diff1$species %in% true_div1$species))
+
+data.frame(species = obs_div_diff0$species,
+           apply(true_pa_est_out[,,-c(1:burnin)], 1:2, mean)>0.5,
+           realcover0 = obs_div_diff0$cover*(obs_div_diff0$species %in% true_div0$species),
+           realcover1 = obs_div_diff1$cover*(obs_div_diff1$species %in% true_div1$species))
+
+data.frame(species = obs_div_diff0$species,
+           true_pa_est_out[,,niter],
+           realcover0 = obs_div_diff0$cover*(obs_div_diff0$species %in% true_div0$species)>0,
+           realcover1 = obs_div_diff1$cover*(obs_div_diff1$species %in% true_div1$species)>0)
 
 #data.frame(true_pa_est, obs_cover)[ps_misID0 | ps_miss0,]
 
@@ -281,6 +366,44 @@ abline(v=c(N,S), lty=2)
 ###### old
 
 if(FALSE) {
+  
+  
+  # losses
+  sps = 12 # 3 is obs error, 6 is lost
+  obs_div_diff0[sps,]
+  pi = obs_div_diff0$pi[sps]
+  qi = obs_div_diff0$qi[sps]
+  obs_div_diff0$cover[sps]
+  (1-pi)*p_lose # 1 found and 2 was lost
+  (1-pi)*pi # 1 found and 2 was missed or misided
+  
+  (1-pi)*pi*qi # 1 found and 2 missed
+  (1-pi)*pi*(1-qi) # 1 found and 2 mis-ided
+  
+  # mis-ids
+  
+  
+  
+  
+  
+  
+  
+  #################################################
+  # Let's start easy - just use real data
+  p_lose = pnorm(0, true_cover_diff, sqrt(a*true_cover_diff^b))
+  
+  transition_type = data.frame(
+    both_found = obs_div_diff0$cover>0 & obs_div_diff1$cover>0,
+    extinction = obs_div_diff0$cover>0 & obs_div_diff1$cover==0,
+    immigration = obs_div_diff0$cover==0 & obs_div_diff1$cover>0
+  )
+  #transition_type$extinction[10] = TRUE
+  #transition_type$both_found[10] = FALSE
+  sum(2*log(1-obs_div_diff0$pi[transition_type$both_found])) + # both found
+    sum(log(1-obs_div_diff0$pi[transition_type$extinction]) + log(p_lose[transition_type$extinction])) + #1 found and 2 lots
+    sum(log(1-obs_div_diff0$pi[transition_type$immigration])+log(dbinom(sum(transition_type$immigration),S-N,pimm))) # immigration and found
+  
+  
   #case with deltaS = 0
   p_lose = pnorm(0, obs_div_diff0$cover, sqrt(a*obs_div_diff0$cover^b))
   
