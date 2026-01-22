@@ -148,11 +148,23 @@ true_pa_est$obs1[obs_div_diff1$cover>0] = 1
 
 obs_cover = data.frame(obs0 = obs_div_merged0$cover_resurvey_diff, obs1 = obs_div_merged1$cover_resurvey_diff)
 p_lose = pnorm(0, true_cover_est, sqrt(a*true_cover_est^b))
+
+
+### Run MCMC
 true_pa_est[true_pa_est$obs0!=1 | true_pa_est$obs1!=1,]
 
 
+
+true_pa_est0 = true_pa_est
+
+
+#true_pa_est=true_pa_est0
+#true_pa_est[7,2] = 1
+
 # calculate LL
 LL = 0
+delta_misID0 = 0
+delta_misID1 = 0
 
 ## colonizations and extinctions from "true" states
 # extinction
@@ -170,35 +182,47 @@ LL = LL + sum(log((1-obs_div_diff0$pi[ps])))
 ps = true_pa_est$obs1==1 & obs_cover$obs1>0
 LL = LL + sum(log((1-obs_div_diff1$pi[ps])))
 
+# 0 obs - 1 true observations (misID)
+ps_misID0 = true_pa_est$obs0==0 & obs_cover$obs0>0
+LL = LL + sum(log(obs_div_diff0$pi[ps_misID0]*(1-obs_div_diff0$qi[ps_misID0])))
 
-########### TODO - working from here
-# 1 obs - 0 true observations (misID)
-ps_misID = true_pa_est$obs0==0 & obs_cover$obs0>0
-true_pa_est[ps,]
+ps_misID1 = true_pa_est$obs1==0 & obs_cover$obs1>0
+LL = LL + sum(log(obs_div_diff1$pi[ps_misID1]*(1-obs_div_diff1$qi[ps_misID1])))
 
 # 0 obs - 1 true observations (missed)
-ps_miss = true_pa_est$obs0==1 & obs_cover$obs0==0
+ps_miss0 = true_pa_est$obs0==1 & obs_cover$obs0==0
+if(sum(ps_misID0)<=sum(ps_miss0)) {
+  misID_match0 = sample(which(ps_miss0),sum(ps_misID0))
+} else {
+  delta_misID0 = sum(ps_misID0)-sum(ps_miss0)
+  misID_match0 = sample(which(ps_miss0),sum(ps_miss0))
+  # delta_misID0 is number of misid's species that were missed by other surveyor
+  misID_nomatch0 = sample(which(ps_misID0),delta_misID0)
+  LL = LL + sum(log(obs_div_diff0$pi[misID_nomatch0]*obs_div_diff0$qi[misID_nomatch0])) # extra missed species
+}
+ps_miss0[misID_match0] = FALSE
+LL = LL + sum(log(obs_div_diff0$pi[ps_miss0]*obs_div_diff0$qi[ps_miss0]))
 
-# for every misID, choose whether to associate to a missed
-## WITHIN obs0/true0
-# would need to link an obs > 0 / true == 0 TO an obs == 0 / true > 0
-# NOTE that obs1/true1 has already been accounted for above.
-# TO DO THIS: misID = p*(1-q)
-## IF misID0 and miss1, THEN p*(1-q)*p*(q) (across both lines)
-## IF misID0 and correct1, THEN ignore additional p*q on case with obs0/true1
-##### OH! Basically, just determines whether we multiply by p(1-q) or by pq
-## TO DO: think
-# in case where obs1 misses the misided species, then no entry for real species exists (an no observation)
-# do we need to add in a line for this?...
+  
+ps_miss1 = true_pa_est$obs1==1 & obs_cover$obs0==1
+if(sum(ps_misID1)<=sum(ps_miss1)) {
+  misID_match1 = sample(which(ps_miss1),sum(ps_misID1))
+} else {
+  delta_misID1 = sum(ps_misID1)-sum(ps_miss1)
+  misID_match1 = sample(which(ps_miss1),sum(ps_miss1))
+  # delta_misID1 is number of misid's species that were missed by other surveyor
+  misID_nomatch1 = sample(which(ps_misID1),delta_misID1)
+  LL = LL + sum(log(obs_div_diff1$pi[misID_nomatch1]*obs_div_diff1$qi[misID_nomatch1])) # extra missed species
+}
+ps_miss1[misID_match1] = FALSE
+LL = LL + sum(log(obs_div_diff1$pi[ps_miss1]*obs_div_diff1$qi[ps_miss1]))
 
-data.frame(true_pa_est, obs_cover)[ps_misID | ps_miss,]
-
-
-# 0-0
-
+LL
 
 
 
+
+#data.frame(true_pa_est, obs_cover)[ps_misID0 | ps_miss0,]
 
 ###### Plotting
 # extinction probability vs. abundance
