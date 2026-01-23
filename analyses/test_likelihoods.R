@@ -250,23 +250,23 @@ if(FALSE) {
       }
       if(j == 2) {
         simtype = "loss"
-        niter = pmin(niter0, sum(true_pa_est$obs1==1))
+        niter = pmin(niter0, min(colSums(true_pa_est[,2:3]==0)))
       } else if(j==3) {
         simtype = "gain"
-        niter = pmin(niter0, sum(true_pa_est$obs1==0))
+        niter = pmin(niter0, min(colSums(true_pa_est[,2:3]==0)))
       }
       if(niter>0) {
         for(i in 1:niter) {
           # choose species to remove or add
           if(simtype == "loss") {
-            # remove a species - bias towards survey 1 to cause loss
-            rowps = sample(which(true_pa_est$obs1==1),1)
-            colps = sample(2:3,1,prob=c(0.3,0.7))
-            true_pa_est[rowps,colps] = 0
+            # add a species - bias towards survey 0 to cause loss
+            colps = sample(2:3,1,prob=c(0.7,0.3))
+            rowps = sample(which(true_pa_est[,colps]==0),1)
+            true_pa_est[rowps,colps] = 1
           } else if(simtype=="gain") {
             # add a species - bias towards survey 1 to cause gain
-            rowps = sample(which(true_pa_est$obs1==0),1)
             colps = sample(2:3,1,prob=c(0.3,0.7))
+            rowps = sample(which(true_pa_est[,colps]==0),1)
             true_pa_est[rowps,colps] = 1
           }
           
@@ -278,6 +278,7 @@ if(FALSE) {
           
           LLout = get_LL()
           LL = LLout$LL
+          true_pa_est = LLout$true_pa_est
           
           # get changes
           alpha = colSums(true_pa_est[,2:3]>0)
@@ -335,13 +336,12 @@ for(i in 1:length(datouttot)) {
   LL0 = datout$LL[1]
   
   x = datout$delta_richness-delta_richness0
-  #x = datout$beta-beta0
   y = datout$LL-max(datout$LL,na.rm=TRUE)
   ps = which(is.finite(x) & is.finite(y))
   if(length(ps)>=minn) {
     x = x[ps]; y=y[ps]
     xrng = sort(c(0,seq(min(x,na.rm=TRUE), max(x,na.rm=TRUE), length=100)))
-    mod = loess(sqrt(-y)~x, enp.target = floor(sqrt(length(x))))
+    mod = loess(sqrt(-y)~x, enp.target = floor(sqrt(siten[i]))/2)
     prd = -(predict(mod, newdata = data.frame(x=xrng))^2)
     #xrng = sort(x)
     #prd = y[order(x)]
@@ -360,13 +360,13 @@ wts = (table(fieldnum)/length(fieldnum))[fieldnum] # weight loess by field-level
 wts[!is.finite(wts)]=NA
 wts = wts/sum(wts,na.rm=TRUE)
 wts[!is.finite(wts)] = 0
-mod = loess(sqrt(-y)~x, enp.target = floor(sqrt(sum(siten>=minn))), weights = wts)
+mod = loess(sqrt(-y)~x, enp.target = floor(sqrt(sum(siten>=minn)))/2, weights = wts)
 prd = -(predict(mod, newdata = data.frame(x=xrng))^2)
 lines(xrng, prd, lwd = 3, col = adjustcolor(1, alpha.f = 0.8))
 abline(h=0,v=0,lty=2)
 
 ## Beta
-plot(c(-0.2,1),LLrng,type="n", xlab = "", ylab = "")
+plot(c(-0.2,0.6),LLrng,type="n", xlab = "", ylab = "")
 
 xtot=NULL; ytot=NULL; fieldnum = NULL
 for(i in 1:length(datouttot)) {
@@ -383,7 +383,7 @@ for(i in 1:length(datouttot)) {
   if(length(ps)>=minn) {
     x = x[ps]; y=y[ps]
     xrng = sort(c(0,seq(min(x,na.rm=TRUE), max(x,na.rm=TRUE), length=100)))
-    mod = loess(sqrt(-y)~x, enp.target = floor(sqrt(length(x))))
+    mod = loess(sqrt(-y)~x, enp.target = floor(sqrt(siten[i]))/2)
     prd = -(predict(mod, newdata = data.frame(x=xrng))^2)
     #xrng = sort(x)
     #prd = y[order(x)]
@@ -402,10 +402,13 @@ wts = (table(fieldnum)/length(fieldnum))[fieldnum] # weight loess by field-level
 wts[!is.finite(wts)]=NA
 wts = wts/sum(wts,na.rm=TRUE)
 wts[!is.finite(wts)] = 0
-mod = loess(sqrt(-y)~x, enp.target = floor(sqrt(sum(siten>=minn))), weights = wts)
+mod = loess(sqrt(-y)~x, enp.target = floor(sqrt(sum(siten>=minn)))/2, weights = wts)
 prd = -(predict(mod, newdata = data.frame(x=xrng))^2)
 lines(xrng, prd, lwd = 3, col = adjustcolor(1, alpha.f = 0.8))
 abline(h=0,v=0,lty=2)
+
+# flat since when we set 01 to 11, it is hard to distinguish between
+# colonization, extinction, or error, all happen when species are rare.
 
 
 ## extinction probability vs. abundance
@@ -429,8 +432,8 @@ abline(h=c(0,1), lty=3)
 
 # colonization probability vs. N and S
 # extinction probability vs. abundance
-N = sum(true_div0$cover>0)
-S = sum(new_species$cover>0)+N
+N = 15
+S = 30
 
 Nsq = seq(0,S, by = 1)
 prob_imm = pbinom(0,S-Nsq,pimm,lower.tail = FALSE)
