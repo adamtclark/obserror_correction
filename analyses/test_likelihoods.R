@@ -322,6 +322,16 @@ minn = 6 # minimum sample size
 LLrng = range(tmp[is.finite(tmp)])
 collst = viridis(length(datouttot))
 
+# plotting par
+pdf("figures/likelihood_test.pdf", width = 6, height = 9)
+#png("figures/likelihood_test.png", width = 6, height = 9, units = "in", res = 200)
+
+m = rbind(c(3,4),
+          c(1,1),
+          c(2,2))
+layout(m)
+par(mar=c(4,4,2,2), oma = c(0, 0.5, 0, 0))
+
 ## Delta_richness
 plot(c(-10,10),LLrng,type="n", xlab = "", ylab = "")
 #plot(c(-0.2,1),LLrng,type="n", xlab = "", ylab = "")
@@ -365,6 +375,10 @@ prd = -(predict(mod, newdata = data.frame(x=xrng))^2)
 lines(xrng, prd, lwd = 3, col = adjustcolor(1, alpha.f = 0.8))
 abline(h=0,v=0,lty=2)
 
+mtext(expression(paste("Error in estimated change in richness")), 1, line = 2.8)
+mtext(expression(paste("Log likelihood ratio, log(L"[i], "/L"[0], ")")), 2, line = 2.4)
+title("C.", adj = 0)
+
 ## Beta
 plot(c(-0.2,0.6),LLrng,type="n", xlab = "", ylab = "")
 
@@ -407,9 +421,16 @@ prd = -(predict(mod, newdata = data.frame(x=xrng))^2)
 lines(xrng, prd, lwd = 3, col = adjustcolor(1, alpha.f = 0.8))
 abline(h=0,v=0,lty=2)
 
+mtext(expression(paste("Error in estimated change in beta diversity")), 1, line = 2.8)
+mtext(expression(paste("Log likelihood ratio, log(L"[i], "/L"[0], ")")), 2, line = 2.4)
+title("D.", adj = 0)
+
 # flat since when we set 01 to 11, it is hard to distinguish between
 # colonization, extinction, or error, all happen when species are rare.
 
+
+# update par
+par(mar=c(5,4,2,2))
 
 ## extinction probability vs. abundance
 cov_sq = seq(0.001, 1, by = 0.001)
@@ -426,9 +447,10 @@ plot(cov_sq, prob_ext, type = "l", log = "x",
 axis(2)
 axis(1, at = c(0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1), las = 2)
 box()
-mtext("Species-level cover", 1, line = 3.5)
+mtext("Species-level cover", 1, line = 3.6)
 mtext("Prob. local extinction", 2, line = 2.5)
 abline(h=c(0,1), lty=3)
+title("A.", adj = 0)
 
 # colonization probability vs. N and S
 # extinction probability vs. abundance
@@ -448,10 +470,13 @@ plot(Nsq, prob_imm, type = "s",
 axis(2)
 axis(1, at = seq(0,S+1, by=2), las = 2)
 box()
-mtext("Plot-level richness", 1, line = 3.2)
+mtext("Plot-level richness", 1, line = 3.6)
 mtext("Prob. ≥1 immigration", 2, line = 2.5)
 abline(h=c(0,1), lty=3)
 abline(v=c(N,S), lty=2)
+title("B.", adj = 0)
+
+dev.off()
 
 # note: these are equal
 #pbinom(0,3,pimm,lower.tail = FALSE)
