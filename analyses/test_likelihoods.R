@@ -1,10 +1,12 @@
-setwd("~/Dropbox/Projects/117_ObservationError/src")
+# The following code replicates Fig. 6 in the manuscript
+
+#setwd("~/Dropbox/Projects/117_ObservationError/src")
 rm(list = ls())
 require(brms)
 require(nlme)
 require(viridis)
 load("output/brms_coverid_models_small.rda")
-source("analyses/diversity_change_functions.R")
+source("util/diversity_change_functions.R")
 
 # plotting parameters
 collst = c("purple", "forestgreen", "dodgerblue3", "firebrick")

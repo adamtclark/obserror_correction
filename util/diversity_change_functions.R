@@ -1,3 +1,6 @@
+# helper functions for measuring changes in diversity between surveys,
+# and for simulating effects of observation error
+
 d = read.csv("data/NutNet_ReSurvey_processed_250821.csv")
 d = d[d$trt=="Control",]
 

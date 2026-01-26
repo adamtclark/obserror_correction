@@ -1,4 +1,6 @@
-setwd("~/Dropbox/Projects/117_ObservationError/src")
+# The following code replicates Fig. 4 in the manuscript
+
+#setwd("~/Dropbox/Projects/117_ObservationError/src")
 rm(list = ls())
 #load("output/cover_e2.rda")
 

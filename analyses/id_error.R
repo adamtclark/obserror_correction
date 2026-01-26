@@ -1,4 +1,6 @@
-setwd("~/Dropbox/Projects/117_ObservationError/src")
+# The following code replicates Fig. 2 in the manuscript
+
+#setwd("~/Dropbox/Projects/117_ObservationError/src")
 rm(list = ls())
 require(brms)
 #load("output/id_error.rda")

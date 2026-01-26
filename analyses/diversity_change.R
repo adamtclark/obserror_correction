@@ -1,4 +1,6 @@
-setwd("~/Dropbox/Projects/117_ObservationError/src")
+# The following code replicates Fig. 5 in the manuscript
+
+#setwd("~/Dropbox/Projects/117_ObservationError/src")
 rm(list = ls())
 #source("util/save_model_outputs.R")
 require(brms)
@@ -13,7 +15,7 @@ alpha_level = 0.5
 cex_level = 0.8
 lwduse = 1.5
 
-source("analyses/diversity_change_functions.R")
+source("util/diversity_change_functions.R")
 
 # loop: test observed change across deltaS values
 deltaS_lvls = -10:10

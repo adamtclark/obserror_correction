@@ -1,4 +1,6 @@
-setwd("~/Dropbox/Projects/117_ObservationError/src")
+# The following code replicates Fig. 3 in the manuscript
+
+#setwd("~/Dropbox/Projects/117_ObservationError/src")
 rm(list = ls())
 #load("output/diversity_e2.rda")
 

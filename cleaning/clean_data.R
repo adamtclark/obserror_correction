@@ -1,4 +1,6 @@
-setwd("~/Dropbox/Projects/117_ObservationError/src/cleaning/")
+# The following code prepares the raw vegetation survey data for all subsequent analyses
+
+#setwd("~/Dropbox/Projects/117_ObservationError/src/cleaning/")
 rm(list = ls())
 
 d = read.csv("../data/cleaning/NutNet_ReSurvey_nometadat_2023.csv", encoding = "UTF8")
