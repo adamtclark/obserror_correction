@@ -1,0 +1,92 @@
+"SITE","SITE_CODE","block","plot","n_resurveys","n_surveyors"
+"Kniezenberg","kzbg.at.dragnet",1,3,2,2
+"Kniezenberg","kzbg.at.dragnet",1,5,4,3
+"Kniezenberg","kzbg.at.dragnet",2,8,4,3
+"Kniezenberg","kzbg.at.dragnet",2,10,2,2
+"Kniezenberg","kzbg.at.dragnet",3,14,4,3
+"Bad Lauchstaedt","badlau.de",1,2,2,1
+"Bad Lauchstaedt","badlau.de",2,9,2,1
+"Bad Lauchstaedt","badlau.de",3,19,2,1
+"Bayreuth","bayr.de",1,9,1,1
+"Bayreuth","bayr.de",2,14,1,1
+"Bayreuth","bayr.de",3,21,2,1
+"Bayreuth","bayr.de",3,26,2,1
+"Bladen_Lakes","blad.us.dragnet",1,4,2,1
+"Bladen_Lakes","blad.us.dragnet",1,5,2,1
+"Bladen_Lakes","blad.us.dragnet",2,6,2,1
+"Bladen_Lakes","blad.us.dragnet",2,7,2,1
+"Bladen_Lakes","blad.us.dragnet",3,12,2,1
+"Bladen_Lakes","blad.us.dragnet",3,14,2,1
+"Bladen_Lakes","blad.us.dragnet",4,18,2,1
+"Bladen_Lakes","blad.us.dragnet",4,19,2,1
+"Bladen_Lakes","blad.us.dragnet",5,21,2,1
+"Bladen_Lakes","blad.us.dragnet",5,23,2,1
+"Chichaqua Bottoms","cbgb.us",1,1,2,1
+"Chichaqua Bottoms","cbgb.us",2,24,2,1
+"Chichaqua Bottoms","cbgb.us",3,33,2,1
+"Cedar Creek","cdcr.us",1,11,2,2
+"Cedar Creek","cdcr.us",2,13,2,2
+"Cedar Creek","cdcr.us",3,26,2,2
+"Cedar Creek","cdcr.us",4,39,2,2
+"Cedar Creek","cdcr.us",5,58,2,2
+"CEREEP","cereep.fr",1,1,2,2
+"CEREEP","cereep.fr",2,11,2,2
+"CEREEP","cereep.fr",3,21,2,2
+"Jena","jena.de",1,5,2,1
+"Jena","jena.de",2,13,2,1
+"Jena","jena.de",3,20,2,1
+"Konza","konz.us",1,4,2,1
+"Konza","konz.us",2,18,2,1
+"Konza","konz.us",3,21,2,1
+"Lubbock (Texas Tech Univ)","lubb.us",1,8,4,2
+"Lubbock (Texas Tech Univ)","lubb.us",2,28,4,2
+"Lubbock (Texas Tech Univ)","lubb.us",3,37,4,2
+"McDaniel College","mcdan.us",1,9,2,1
+"McDaniel College","mcdan.us",2,16,2,1
+"McDaniel College","mcdan.us",3,28,2,1
+"Arches National Park","moab.us",1,8,2,1
+"Arches National Park","moab.us",2,12,2,1
+"Arches National Park","moab.us",3,19,2,1
+"Missoula","msla.us",1,10,4,2
+"Missoula","msla.us",2,18,4,2
+"Missoula","msla.us",3,21,4,2
+"Mt Caroline ","mtca.au",1,8,3,3
+"Mt Caroline ","mtca.au",2,16,3,3
+"Mt Caroline ","mtca.au",3,27,3,3
+"Nillah","nilla.au",1,10,2,1
+"Nillah","nilla.au",2,16,2,1
+"Nillah","nilla.au",3,24,2,1
+"Nillahcootie","nillah.au.dragnet",1,3,2,1
+"Nillahcootie","nillah.au.dragnet",2,6,2,1
+"Nillahcootie","nillah.au.dragnet",3,15,2,1
+"Saana","saana.fi",1,4,2,2
+"Saana","saana.fi",2,12,2,2
+"Saana","saana.fi",3,28,2,2
+"Sandhills","sandhill.us",1,10,2,1
+"Sandhills","sandhill.us",2,16,2,1
+"Sandhills","sandhill.us",3,22,2,1
+"Sheep Experimental Station ","shps.us",1,2,2,1
+"Sheep Experimental Station ","shps.us",2,13,2,1
+"Sheep Experimental Station ","shps.us",3,27,2,1
+"Stoderzinken","stzk.at.dragnet",1,1,2,2
+"Stoderzinken","stzk.at.dragnet",1,4,2,2
+"Stoderzinken","stzk.at.dragnet",2,7,2,2
+"Stoderzinken","stzk.at.dragnet",2,8,2,2
+"Stoderzinken","stzk.at.dragnet",3,9,2,2
+"Stoderzinken","stzk.at.dragnet",3,11,2,1
+"Stoderzinken","stzk.at.dragnet",4,13,2,2
+"Stoderzinken","stzk.at.dragnet",4,14,2,2
+"Svalbard ","sval.no",1,9,2,2
+"Svalbard ","sval.no",2,16,2,2
+"Svalbard ","sval.no",3,22,2,2
+"Tejon_foothill","tejon_foot.us",1,1,2,2
+"Tejon_foothill","tejon_foot.us",2,9,2,2
+"Tejon_foothill","tejon_foot.us",3,17,2,2
+"Tejon_montane_south","tejon_south.us",1,1,2,2
+"Temple","temple.us",1,1,2,2
+"Temple","temple.us",2,11,2,2
+"Temple","temple.us",3,21,2,2
+"Yarramundi","yarra.au",1,8,4,2
+"Yarramundi","yarra.au",2,18,4,2
+"Yarramundi","yarra.au",3,36,4,2
+"Yarramundi","yarra.au",4,45,4,2
