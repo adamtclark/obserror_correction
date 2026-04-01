@@ -1,4 +1,4 @@
-# The following code creates a table with all sites used in the analysis
+# The following code creates a table with all sites used in the analysis (Table S1)
 
 #setwd("~/Dropbox/Projects/117_ObservationError/src")
 rm(list = ls())
