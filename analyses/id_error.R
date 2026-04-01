@@ -29,6 +29,11 @@ mod_p0 <- brm(bf(ZeroObs | trials(Ntrials) ~ nonzero_cov_mean + (1|SITE_CODE)),
               save_pars = save_pars(all = TRUE),
               data = d[ps,], family = binomial(), cores = 2)
 
+mod_p0b <- brm(bf(ZeroObs | trials(Ntrials) ~ nonzero_cov_mean + (1|SITE_CODE/plot)),
+              #   zi ~ group + (1|SITE_CODE)),
+              save_pars = save_pars(all = TRUE),
+              data = d[ps,], family = binomial(), cores = 2)
+
 mod_p1 <- brm(bf(ZeroObs | trials(Ntrials) ~ nonzero_cov_mean,
                  zi ~ (1|SITE_CODE)),
               save_pars = save_pars(all = TRUE),
@@ -39,10 +44,10 @@ mod_p2 <- brm(bf(ZeroObs | trials(Ntrials) ~ nonzero_cov_mean,
               save_pars = save_pars(all = TRUE),
               data = d[ps,], family = zero_inflated_binomial(), cores = 2)
 
-loo_p0_p1_p2 = loo(mod_p0, mod_p1, mod_p2, moment_match = TRUE)
+loo_p0_p1_p2 = loo(mod_p0, mod_p0b, mod_p1, mod_p2, moment_match = TRUE)
 loo_p0_p1_p2 #p2 much better
 mod_p0 = mod_p2
-rm(mod_p2, mod_p1)
+rm(mod_p2, mod_p0b, mod_p1)
 
 # graminoids vs. non-graminoids
 mod_pg <- brm(bf(ZeroObs | trials(Ntrials) ~ nonzero_cov_mean*group,
