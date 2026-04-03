@@ -62,8 +62,8 @@ simulate_change = function(divdat, deltaS = -1, process_noise = TRUE) {
       ps = which(index_lst==uindex_lst[i])
       dtmp = divdat[ps,]
       S = length(ps)
-      S_target = S+deltaS
-      dS_percent = deltaS/S
+      S_target = floor(S+S*deltaS)
+      #dS_percent = deltaS/S
       
       if(deltaS<0) { # species loss
         if(S_target > 0) {
@@ -90,10 +90,10 @@ simulate_change = function(divdat, deltaS = -1, process_noise = TRUE) {
         new_species = tapply(new_species$cover, new_species$species, mean)
         new_groups = divdat$group[match(names(new_species), divdat$species)]
         
-        S_target = S+deltaS
+        S_target = ceiling(S+S*deltaS)
         S_max = S + length(new_species)
         if(S_target <= S_max) {
-          rnd = sample(x = length(new_species), size = deltaS)
+          rnd = sample(x = length(new_species), size = S_target-S)
           uplot = sort(unique(dtmp$plot))
           dnew = data.frame(SITE_CODE=site, plot = uplot,
                             species = names(new_species[rnd]),
