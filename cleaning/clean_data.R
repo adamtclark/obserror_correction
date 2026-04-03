@@ -207,7 +207,7 @@ write.csv(sp_families, "../data/cleaning/family_lookup.csv", row.names = FALSE)
 # update with WCVP taxonomy
 d$SPECIES=sp_families$corrected[match(d$SPECIES, sp_families$species)]
 
-# remove seasonal survys
+# remove seasonal surveys
 d = d[d$SEASON!="early",]
 
 # reshape to multiple columns per survey

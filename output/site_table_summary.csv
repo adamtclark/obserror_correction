@@ -1,0 +1,26 @@
+"SITE","SITE_CODE","n_plots","n_samesurvey","n_differentsurvey"
+"Arches National Park","moab.us",3,3,3
+"Bad Lauchstaedt","badlau.de",3,3,3
+"Bayreuth","bayr.de",4,2,4
+"Bladen_Lakes","blad.us.dragnet",10,10,10
+"Cedar Creek","cdcr.us",5,0,10
+"CEREEP","cereep.fr",3,0,6
+"Chichaqua Bottoms","cbgb.us",3,3,3
+"Jena","jena.de",3,3,3
+"Kniezenberg","kzbg.at.dragnet",5,3,13
+"Konza","konz.us",3,3,3
+"Lubbock (Texas Tech Univ)","lubb.us",3,6,6
+"McDaniel College","mcdan.us",3,3,3
+"Missoula","msla.us",3,6,6
+"Mt Caroline ","mtca.au",3,0,9
+"Nillah","nilla.au",3,3,3
+"Nillahcootie","nillah.au.dragnet",3,3,3
+"Saana","saana.fi",3,0,6
+"Sandhills","sandhill.us",3,3,3
+"Sheep Experimental Station ","shps.us",3,3,3
+"Stoderzinken","stzk.at.dragnet",8,1,15
+"Svalbard ","sval.no",3,0,6
+"Tejon_foothill","tejon_foot.us",3,0,6
+"Tejon_montane_south","tejon_south.us",1,0,2
+"Temple","temple.us",3,0,6
+"Yarramundi","yarra.au",4,8,8
