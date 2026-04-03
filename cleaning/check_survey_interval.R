@@ -1,4 +1,8 @@
 d = read.csv("data/NutNet_ReSurvey_processed_250821.csv")
+times_full = unique(d[,c("SITE", "plot", "block", "date_1", "date_2", "date_3", "date_4")])
+times_full=times_full[order(times_full$SITE, times_full$block, times_full$plot, times_full$date_1),]
+write.csv(times_full, "output/site_table_dates.csv")
+
 times = unique(d[,c("date_1", "date_2", "date_3", "date_4")])
 
 d_hours = rep(NA, nrow(times))
