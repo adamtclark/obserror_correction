@@ -172,6 +172,9 @@ colnames(pred_pngd) = c("Estimate", "Q2.5", "QmSD", "QpSD", "Q97.5")
 
 #####################
 # plot total
+set.seed(13234)
+jitter_amount = 0.02
+alpha_level2 = 0.2
 pdf("figures/id_error.pdf", width = 8, height = 4)
 #png("figures/id_error.png", width = 8, height = 4, units = "in", res = 200)
 
@@ -180,11 +183,11 @@ layout(X)
 par(mar=c(2,2,2,2), oma = c(2,2,0,0))
 ps_same = which(d$Ntrials_same>0)
 ps_diff = which(d$Ntrials_diff>0)
-plot(d$nonzero_cov_mean_same[ps_same], (d$ZeroObs_same/d$Ntrials_same)[ps_same],
+plot(d$nonzero_cov_mean_same[ps_same], jitter((d$ZeroObs_same/d$Ntrials_same)[ps_same], amount = jitter_amount),
      xaxs = "i",
-     ylim = c(0, 1),
+     ylim = c(0-jitter_amount, 1+jitter_amount),
      xlim = c(0,1),
-     cex = cex_level, col = adjustcolor(collst[3], alpha_level),
+     cex = cex_level, col = adjustcolor(collst[3], alpha_level2),
      xlab = "", ylab = "")
 mtext("Mean non-zero species-level cover", 1, line = 2.4)
 mtext("Prob. detection error", 2, line = 2.4)
@@ -193,9 +196,9 @@ abline(h = c(0, 1), v = c(0,1), lty = 3)
 polygon(c(xsq, rev(xsq)), c(pred_ps[,c(3)], rev(pred_ps[,c(4)])), col = adjustcolor(collst[3], 0.5), border = NA)
 lines(xsq, pred_ps[,1], lty = c(1), col = collst[3], lwd = 1.8)
 
-points((d$nonzero_cov_mean_diff[ps_diff]), (d$ZeroObs_diff/d$Ntrials_diff)[ps_diff],
+points((d$nonzero_cov_mean_diff[ps_diff]), jitter((d$ZeroObs_diff/d$Ntrials_diff)[ps_diff], amount = jitter_amount),
        pch = 2,
-       cex = cex_level, col = adjustcolor(collst[4], alpha_level))
+       cex = cex_level, col = adjustcolor(collst[4], alpha_level2))
 polygon(c(xsq, rev(xsq)), c(pred_pd[,c(3)], rev(pred_pd[,c(4)])), col = adjustcolor(collst[4], 0.5), border = NA)
 lines(xsq, pred_pd[,1], lty = c(1), col = collst[4], lwd = 1.8)
 #matlines(xsq, pred_cd[,c(1,4,5)], lty = c(1,2,2), col = collst[4])
@@ -226,20 +229,20 @@ lines(ctps_plot[tmp], pred_diff, lwd = 1.5, lty = 2, col = collst[4])
 ps_same = which(d$Ntrials_same>0 & d$group == "Graminoid")
 ps_diff = which(d$Ntrials_diff>0 & d$group == "Graminoid")
 
-plot(d$nonzero_cov_mean_same[ps_same], (d$ZeroObs_same/d$Ntrials_same)[ps_same],
+plot(d$nonzero_cov_mean_same[ps_same], jitter((d$ZeroObs_same/d$Ntrials_same)[ps_same], amount = jitter_amount),
      xaxs = "i",
-     ylim = c(0, 1),
+     ylim = c(0-jitter_amount, 1+jitter_amount),
      xlim = c(0,1),
-     cex = cex_level, col = adjustcolor(collst[3], alpha_level),
+     cex = cex_level, col = adjustcolor(collst[3], alpha_level2),
      xlab = "", ylab = "")
 abline(h = c(0, 1), v = c(0,1), lty = 3)
 
 polygon(c(xsq, rev(xsq)), c(pred_pgs[,c(3)], rev(pred_pgs[,c(4)])), col = adjustcolor(collst[3], 0.5), border = NA)
 lines(xsq, pred_pgs[,1], lty = c(1), col = collst[3], lwd = 1.8)
 
-points((d$nonzero_cov_mean_diff[ps_diff]), (d$ZeroObs_diff/d$Ntrials_diff)[ps_diff],
+points((d$nonzero_cov_mean_diff[ps_diff]), jitter((d$ZeroObs_diff/d$Ntrials_diff)[ps_diff],amount = jitter_amount),
        pch = 2,
-       cex = cex_level, col = adjustcolor(collst[4], alpha_level))
+       cex = cex_level, col = adjustcolor(collst[4], alpha_level2))
 polygon(c(xsq, rev(xsq)), c(pred_pd[,c(3)], rev(pred_pd[,c(4)])), col = adjustcolor(collst[4], 0.5), border = NA)
 lines(xsq, pred_pd[,1], lty = c(1), col = collst[4], lwd = 1.8)
 
@@ -267,20 +270,20 @@ title("B. Graminoids", adj = 0)
 ps_same = which(d$Ntrials_same>0 & d$group == "Non-Graminoid")
 ps_diff = which(d$Ntrials_diff>0 & d$group == "Non-Graminoid")
 
-plot(d$nonzero_cov_mean_same[ps_same], (d$ZeroObs_same/d$Ntrials_same)[ps_same],
+plot(d$nonzero_cov_mean_same[ps_same], jitter((d$ZeroObs_same/d$Ntrials_same)[ps_same],jitter_amount),
      xaxs = "i",
-     ylim = c(0, 1),
+     ylim = c(0-jitter_amount, 1+jitter_amount),
      xlim = c(0,1),
-     cex = cex_level, col = adjustcolor(collst[3], alpha_level),
+     cex = cex_level, col = adjustcolor(collst[3], alpha_level2),
      xlab = "", ylab = "")
 abline(h = c(0, 1), v = c(0,1), lty = 3)
 
 polygon(c(xsq, rev(xsq)), c(pred_pngs[,c(3)], rev(pred_pngs[,c(4)])), col = adjustcolor(collst[3], 0.5), border = NA)
 lines(xsq, pred_pngs[,1], lty = c(1), col = collst[3], lwd = 1.8)
 
-points((d$nonzero_cov_mean_diff[ps_diff]), (d$ZeroObs_diff/d$Ntrials_diff)[ps_diff],
+points((d$nonzero_cov_mean_diff[ps_diff]), jitter((d$ZeroObs_diff/d$Ntrials_diff)[ps_diff],jitter_amount),
        pch = 2,
-       cex = cex_level, col = adjustcolor(collst[4], alpha_level))
+       cex = cex_level, col = adjustcolor(collst[4], alpha_level2))
 polygon(c(xsq, rev(xsq)), c(pred_pd[,c(3)], rev(pred_pd[,c(4)])), col = adjustcolor(collst[4], 0.5), border = NA)
 lines(xsq, pred_pd[,1], lty = c(1), col = collst[4], lwd = 1.8)
 
