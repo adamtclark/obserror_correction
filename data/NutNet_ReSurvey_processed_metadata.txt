@@ -1,0 +1,34 @@
+SITE: NutNet or DRAGNet site name
+SITE_CODE: NutNet or DRAGNet site code
+NOTES: Notes associated with measurement (should be NA for all rows)
+continent: continent of NutNet or DRAGNet site
+country: country of NutNet or DRAGNet site
+region: region of NutNet or DRAGNet site
+managed: binary - is grassland at site managed?
+burned: binary - is grassland at site burned?
+grazed: binary - is grassland at site grazed?
+anthropogenic: binary - is grassland at site human made or maintained (or natural grassland)?
+habitat: habitat class for site
+elevation: elevation for site (m)
+latitude: latitude for site
+longitude: longitude for site
+experiment_type: NutNet or DRAGNet experiment?
+block: block number
+plot: plot number
+trt: treatment (Control, N/P/K Fertilizer, Fenced, Disturbed, or interactoin)
+first_nutrient_year: first year in which nutrients were added
+species: species ID
+family: species family
+group: species functional group (graminoid/non-graminoid)
+cover_1: cover for first survey
+surveyor_1: surveyor ID for first survey
+date_1: survey date for first survey
+cover_2: cover for second survey (if applicable)
+surveyor_2: surveyor ID for second survey (if applicable)
+date_2: survey date for second survey (if applicable)
+cover_3: cover for third survey (if applicable)
+surveyor_3: surveyor ID for third survey (if applicable)
+date_3: survey date for third survey (if applicable)
+cover_4: cover for fourth survey (if applicable)
+surveyor_4: surveyor ID for fourth survey (if applicable)
+date_4: survey date for fourth survey (if applicable)
